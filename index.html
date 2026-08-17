@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clínica-Escola · Sistema (Supabase)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F5F6F3; --surface:#FFFFFF; --surface-alt:#ECEFEA;
+  --ink:#14211D; --ink-soft:#54655D; --ink-faint:#8B978F;
+  --primary:#1F6F5C; --primary-dark:#163F35; --primary-soft:#E4EFEA;
+  --secondary:#35507A; --secondary-soft:#E7ECF3;
+  --ia:#6C4FA6; --ia-soft:#EFE9F8;
+  --border:#DDE2DC;
+  --amber:#B8791F; --amber-soft:#FBF0DE;
+  --red:#B5453B; --red-soft:#FBEAE8;
+  --radius:10px; --shadow:0 1px 2px rgba(20,33,29,.06), 0 8px 24px -12px rgba(20,33,29,.12);
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans',-apple-system,sans-serif;font-size:14px;line-height:1.5;}
+.mono{font-family:'IBM Plex Mono',monospace;}
+h1,h2,h3{font-family:'Source Serif 4',Georgia,serif;font-weight:600;margin:0 0 8px;color:var(--primary-dark);}
+.app{display:grid;grid-template-columns:240px 1fr;min-height:100vh;}
+.sidebar{background:var(--primary-dark);color:#EAF3EF;padding:20px 16px;display:flex;flex-direction:column;gap:14px;}
+.brand{display:flex;align-items:center;gap:8px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.14);}
+.brand-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--primary),#3FA88C);display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-weight:700;font-size:15px;flex-shrink:0;}
+.brand-name{font-size:14.5px;font-weight:600;}
+.brand-sub{font-size:10.5px;color:#9FC2B4;text-transform:uppercase;letter-spacing:.03em;}
+nav{display:flex;flex-direction:column;gap:2px;}
+.nav-item{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:7px;color:#CBE0D6;background:none;border:none;text-align:left;font-size:13.5px;cursor:pointer;font-family:inherit;}
+.nav-item:hover{background:rgba(255,255,255,.06);}
+.nav-item.active{background:rgba(255,255,255,.14);color:#fff;font-weight:600;}
+.sidebar-note{margin-top:auto;font-size:11px;color:#9FC2B4;line-height:1.4;padding-top:14px;border-top:1px solid rgba(255,255,255,.1);}
+main{padding:26px 34px 60px;max-width:1180px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;margin-bottom:16px;box-shadow:var(--shadow);}
+.card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+.eyebrow{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint);margin-bottom:3px;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;}
+.field label{font-size:11.5px;color:var(--ink-soft);font-weight:500;}
+.field input,.field textarea,.field select{border:1px solid var(--border);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:13px;background:#FCFDFC;color:var(--ink);}
+.field textarea{resize:vertical;min-height:56px;}
+.btn{display:inline-flex;align-items:center;gap:6px;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:500;border:1px solid transparent;cursor:pointer;font-family:inherit;}
+.btn-primary{background:var(--primary);color:#fff;}
+.btn-primary:hover{background:var(--primary-dark);}
+.btn-ghost{background:var(--surface);border-color:var(--border);color:var(--ink);}
+.btn-ghost:hover{background:var(--surface-alt);}
+.btn-danger{background:var(--red-soft);color:var(--red);border-color:#EAC7C2;}
+.btn-sm{padding:5px 10px;font-size:12px;}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:3px 9px;border-radius:99px;}
+.badge-wait{background:var(--amber-soft);color:var(--amber);}
+.badge-progress{background:var(--secondary-soft);color:var(--secondary);}
+.badge-done{background:var(--primary-soft);color:var(--primary-dark);}
+.badge-code{background:var(--surface-alt);color:var(--ink-soft);font-family:'IBM Plex Mono',monospace;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint);padding:0 10px 8px;border-bottom:1px solid var(--border);font-weight:600;}
+td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+tr.clickable{cursor:pointer;}
+tr.clickable:hover{background:var(--surface-alt);}
+.muted{color:var(--ink-faint);font-size:12.5px;}
+.divider{height:1px;background:var(--border);margin:14px 0;}
+.pill-select{display:flex;gap:8px;margin-bottom:14px;}
+.pill-select button{flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--surface);cursor:pointer;font-family:inherit;font-size:13px;}
+.pill-select button.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--primary-dark);color:#fff;padding:12px 18px;border-radius:8px;font-size:13px;box-shadow:var(--shadow);opacity:0;transform:translateY(8px);transition:.25s;pointer-events:none;z-index:50;}
+.toast.show{opacity:1;transform:translateY(0);}
+
+/* stomatograma */
+.stoma-wrap{display:flex;gap:24px;flex-wrap:wrap;}
+.stoma-svg-box{flex:1;min-width:520px;}
+.region{stroke:#7A5A55;stroke-width:1.5;fill:#F1E6E2;cursor:pointer;transition:.15s;}
+.region:hover{fill:#E7C9C0;}
+.region.has-lesao{fill:#F3D2CC;stroke:#B5453B;stroke-width:2;}
+.region.selected{fill:#D8C4EF;stroke:#6C4FA6;stroke-width:2.2;}
+.stoma-lbl{font-size:12px;fill:#3A2A27;font-family:'IBM Plex Sans',sans-serif;}
+.stoma-title{font-weight:bold;font-size:13px;fill:#123830;}
+.lesoes-panel{width:320px;}
+.lesao-item{border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:12.5px;}
+.lesao-item .rgn{font-weight:600;color:var(--ia);}
+.empty-state{color:var(--ink-faint);font-size:12.5px;padding:20px;text-align:center;}
+
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">C</div>
+      <div>
+        <div class="brand-name">Clínica-Escola</div>
+        <div class="brand-sub">Supabase · nuvem</div>
+      </div>
+    </div>
+    <nav>
+      <button class="nav-item" data-view="pacientes">Pacientes</button>
+      <button class="nav-item" data-view="atendimento">Atendimento</button>
+      <button class="nav-item" data-view="stomatograma">Stomatograma</button>
+      <button class="nav-item" data-view="encaminhamentos">Encaminhamentos</button>
+      <button class="nav-item" data-view="auditoria">Auditoria</button>
+    </nav>
+    <div class="field" style="margin-top:6px">
+      <label style="color:#9FC2B4">Seu nome (aparece na auditoria)</label>
+      <input id="usuario-atual" placeholder="ex.: Lucas Martins" style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);color:#EAF3EF;">
+    </div>
+    <div class="sidebar-note" id="conn-status">Verificando conexão com o Supabase...</div>
+  </aside>
+  <main id="main"></main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+// ============================================================
+// CONFIGURAÇÃO — cole aqui a URL e a chave do SEU projeto Supabase.
+// Onde achar: painel do Supabase → seu projeto → Settings (ícone de
+// engrenagem) → API. Copie "Project URL" e a chave "anon public".
+// NUNCA cole a chave "service_role" (secreta) — só a "anon public".
+// ============================================================
+const SUPABASE_URL = "https://jlfowtzkgtgnvquzroxb.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_u1oN0kRN6niw1gcHiO8n2g_77gD_F95";
+
+</script>
+<script>
+// ============================================================
+// Cliente Supabase — todas as chamadas ao "banco" acontecem daqui,
+// direto do navegador para a nuvem. Não existe mais servidor local.
+// ============================================================
+
+// Mostra qualquer erro de forma bem visível na tela — nunca falha em silêncio.
+function showFatalError(msg) {
+  const status = document.getElementById('conn-status');
+  if (status) { status.textContent = '⚠ ' + msg; status.style.color = '#E3B45A'; }
+  const main = document.getElementById('main');
+  if (main) {
+    main.innerHTML = `<div class="card"><h2 style="color:#B5453B">Não foi possível carregar o sistema</h2>
+      <p style="font-family:'IBM Plex Sans',sans-serif;font-size:13.5px;color:#54655D;line-height:1.6;">${msg}</p></div>`;
+  }
+}
+// Rede de segurança: qualquer erro não previsto, em qualquer parte do app, aparece na tela.
+window.addEventListener('error', (e) => showFatalError('Erro: ' + (e.message || e.error || 'desconhecido')));
+window.addEventListener('unhandledrejection', (e) => showFatalError('Erro: ' + (e.reason && e.reason.message ? e.reason.message : e.reason)));
+
+let sbClient = null;
+let initError = null;
+try {
+  if (typeof window.supabase === 'undefined') {
+    initError = 'A biblioteca do Supabase não carregou. Isso normalmente acontece por falta de conexão com a internet no momento em que a página abriu (ela precisa baixar um arquivo externo). Verifique sua internet e recarregue a página (F5).';
+  } else if (typeof SUPABASE_URL === 'undefined' || typeof SUPABASE_ANON_KEY === 'undefined') {
+    initError = 'O arquivo supabase-config.js não foi carregado. Confira se ele está na mesma pasta que o index.html e se o nome está exatamente "supabase-config.js" (não "supabase-config.js.txt").';
+  } else if (SUPABASE_URL.includes('COLE_AQUI') || SUPABASE_ANON_KEY.includes('COLE_AQUI')) {
+    initError = 'Configure o arquivo supabase-config.js com a URL e a chave "anon public" do seu projeto Supabase.';
+  } else {
+    sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
+} catch (e) {
+  initError = 'Falha ao iniciar o Supabase: ' + e.message;
+}
+
+const state = {
+  view: 'pacientes',
+  especialidades: [],
+  regioes: [],
+  pacienteAtual: null,
+  atendimentoAtual: null,
+};
+
+const $main = document.getElementById('main');
+
+function toast(msg) {
+  let t = document.querySelector('.toast');
+  if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.appendChild(t); }
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function usuarioAtual() {
+  const v = document.getElementById('usuario-atual').value.trim();
+  return v || 'sistema';
+}
+
+// Envolve toda chamada ao Supabase: já trata erro de forma consistente.
+async function sb(promise) {
+  const { data, error } = await promise;
+  if (error) { toast('Erro: ' + error.message); throw error; }
+  return data;
+}
+
+async function checarConexao() {
+  const el = document.getElementById('conn-status');
+  try {
+    const { error } = await sbClient.from('especialidades').select('id').limit(1);
+    if (error) throw error;
+    el.textContent = '✓ Conectado ao Supabase.';
+    return true;
+  } catch (e) {
+    el.textContent = '⚠ Não foi possível conectar: ' + (e.message || e) + ' — confira a URL/chave e se o script SQL foi rodado.';
+    el.style.color = '#E3B45A';
+    return false;
+  }
+}
+
+// ---------- auditoria ----------
+async function logAcao(acao, entidade, entidade_id) {
+  await sb(sbClient.from('auditoria').insert({ usuario: usuarioAtual(), acao, entidade, entidade_id }));
+}
+async function logCampo(atendimento_id, campo, valorAnterior, valorNovo) {
+  const antes = valorAnterior === undefined || valorAnterior === null ? '' : String(valorAnterior);
+  const depois = valorNovo === undefined || valorNovo === null ? '' : String(valorNovo);
+  if (antes === depois) return;
+  await sb(sbClient.from('auditoria').insert({
+    usuario: usuarioAtual(), acao: 'alterou_campo', entidade: 'atendimento',
+    entidade_id: atendimento_id, atendimento_id, campo, valor_anterior: antes, valor_novo: depois,
+  }));
+}
+
+function setActiveNav() {
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === state.view));
+}
+async function go(view) {
+  state.view = view;
+  setActiveNav();
+  if (view === 'pacientes') await renderPacientes();
+  else if (view === 'atendimento') await renderAtendimento();
+  else if (view === 'stomatograma') await renderStomatograma();
+  else if (view === 'encaminhamentos') await renderEncaminhamentos();
+  else if (view === 'auditoria') await renderAuditoria();
+}
+document.querySelectorAll('.nav-item').forEach(b => b.addEventListener('click', () => { if (sbClient) go(b.dataset.view); }));
+
+async function ensureEspecialidades() {
+  if (!state.especialidades.length) {
+    state.especialidades = await sb(sbClient.from('especialidades').select('*').eq('ativo', true).order('nome'));
+  }
+}
+async function ensureRegioes() {
+  if (!state.regioes.length) {
+    state.regioes = await sb(sbClient.from('regioes_stomatograma').select('*').order('painel').order('id'));
+  }
+}
+
+// ============================= PACIENTES =============================
+async function renderPacientes() {
+  const lista = await sb(sbClient.from('pacientes').select('*').order('id', { ascending: false }).limit(50));
+  $main.innerHTML = `
+    <div class="eyebrow">Cadastro</div>
+    <h2>Pacientes</h2>
+
+    <div class="card">
+      <div class="card-head"><h3 style="margin:0">Buscar</h3></div>
+      <div class="field"><input id="busca-paciente" placeholder="Nome, código ou CPF"></div>
+      <table id="tbl-pacientes">
+        <tr><th>Código</th><th>Nome</th><th>CPF</th><th></th></tr>
+        ${listaPacientesRows(lista)}
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3 style="margin:0">Novo cadastro</h3></div>
+      <div class="grid2">
+        <div class="field"><label>Nome completo</label><input id="p-nome" placeholder="Nome fictício"></div>
+        <div class="field"><label>CPF</label><input id="p-cpf" placeholder="000.000.000-00"></div>
+        <div class="field"><label>Data de nascimento</label><input id="p-nasc" placeholder="dd/mm/aaaa"></div>
+        <div class="field"><label>Telefone</label><input id="p-tel"></div>
+        <div class="field" style="grid-column:1/-1"><label>Endereço</label><input id="p-end"></div>
+        <div class="field"><label>Alergias</label><input id="p-alerg"></div>
+        <div class="field"><label>Comorbidades</label><input id="p-comorb"></div>
+        <div class="field"><label>Medicamentos</label><input id="p-med"></div>
+        <div class="field"><label>Hábitos</label><input id="p-hab"></div>
+      </div>
+      <button class="btn btn-primary" id="btn-criar-paciente">Salvar cadastro</button>
+    </div>
+
+    <div id="detalhe-paciente"></div>
+  `;
+
+  document.getElementById('busca-paciente').addEventListener('input', async (e) => {
+    const q = e.target.value.replace(/[,()%]/g, '').trim();
+    let rows;
+    if (q) {
+      rows = await sb(sbClient.from('pacientes').select('*')
+        .or(`nome.ilike.%${q}%,codigo.ilike.%${q}%,cpf.ilike.%${q}%`)
+        .order('id', { ascending: false }));
+    } else {
+      rows = await sb(sbClient.from('pacientes').select('*').order('id', { ascending: false }).limit(50));
+    }
+    document.getElementById('tbl-pacientes').innerHTML = `<tr><th>Código</th><th>Nome</th><th>CPF</th><th></th></tr>${listaPacientesRows(rows)}`;
+    wireAbrirPaciente();
+  });
+
+  document.getElementById('btn-criar-paciente').addEventListener('click', async () => {
+    const nome = document.getElementById('p-nome').value.trim();
+    if (!nome) { toast('Informe o nome do paciente'); return; }
+    const criado = await sb(sbClient.from('pacientes').insert({
+      nome, cpf: v('p-cpf'), data_nascimento: v('p-nasc'), telefone: v('p-tel'), endereco: v('p-end'),
+      alergias: v('p-alerg'), comorbidades: v('p-comorb'), medicamentos: v('p-med'), habitos: v('p-hab'),
+    }).select().single());
+    await logAcao('criou', 'paciente', criado.id);
+    toast('Paciente cadastrado');
+    renderPacientes();
+  });
+
+  wireAbrirPaciente();
+}
+
+function listaPacientesRows(lista) {
+  return lista.map(p => `
+    <tr class="clickable" data-id="${p.id}">
+      <td class="mono">${p.codigo}</td><td>${p.nome}</td><td>${p.cpf || '—'}</td>
+      <td><button class="btn btn-ghost btn-sm" data-abrir="${p.id}">Abrir</button></td>
+    </tr>`).join('') || `<tr><td colspan="4" class="empty-state">Nenhum paciente cadastrado ainda.</td></tr>`;
+}
+
+function wireAbrirPaciente() {
+  document.querySelectorAll('[data-abrir]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await abrirProntuario(btn.dataset.abrir);
+    });
+  });
+}
+
+async function abrirProntuario(pacienteId) {
+  const paciente = await sb(sbClient.from('pacientes').select('*').eq('id', pacienteId).single());
+  const atendimentos = await sb(sbClient.from('atendimentos')
+    .select('*, especialidades(nome)').eq('paciente_id', pacienteId).order('id', { ascending: false }));
+  const encaminhamentos = await sb(sbClient.from('encaminhamentos')
+    .select('*').eq('paciente_id', pacienteId).order('id', { ascending: false }));
+  const documentosGerais = await sb(sbClient.from('documentos')
+    .select('*').eq('paciente_id', pacienteId).is('atendimento_id', null).order('id', { ascending: false }));
+  state.pacienteAtual = paciente;
+
+  const box = document.getElementById('detalhe-paciente');
+  box.innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <h3 style="margin:0">${paciente.nome} <span class="badge badge-code mono">${paciente.codigo}</span></h3>
+        <button class="btn btn-primary btn-sm" id="ir-atendimento">Novo atendimento</button>
+      </div>
+      <div class="grid3">
+        <div><div class="muted">Alergias</div><div>${paciente.alergias || '—'}</div></div>
+        <div><div class="muted">Comorbidades</div><div>${paciente.comorbidades || '—'}</div></div>
+        <div><div class="muted">Medicamentos</div><div>${paciente.medicamentos || '—'}</div></div>
+      </div>
+      <div class="divider"></div>
+      <div class="muted" style="margin-bottom:8px">Prontuário · histórico de atendimentos (clique para abrir)</div>
+      <table>
+        <tr><th>Sessão</th><th>Especialidade</th><th>Status</th><th>Data</th></tr>
+        ${atendimentos.map(a => `
+          <tr class="clickable" data-atendimento="${a.id}">
+            <td class="mono">${a.numero_sessao}</td><td>${a.especialidades?.nome || '—'}</td>
+            <td><span class="badge badge-progress">${a.status}</span></td><td>${a.criado_em}</td>
+          </tr>`).join('') || `<tr><td colspan="4" class="empty-state">Nenhum atendimento ainda.</td></tr>`}
+      </table>
+      <div class="divider"></div>
+      <div class="muted" style="margin-bottom:8px">Encaminhamentos relacionados a este paciente</div>
+      <table>
+        <tr><th>Origem</th><th>Responsável / unidade</th><th>Status</th><th>Data</th></tr>
+        ${encaminhamentos.map(en => `
+          <tr>
+            <td><span class="badge ${en.origem_tipo === 'ubs' ? 'badge-progress' : 'badge-done'}">${en.origem_tipo === 'ubs' ? 'UBS' : 'Clínica particular'}</span></td>
+            <td>${en.nome_origem || '—'}</td><td>${en.status}</td><td>${en.criado_em}</td>
+          </tr>`).join('') || `<tr><td colspan="4" class="empty-state">Nenhum encaminhamento para este paciente ainda.</td></tr>`}
+      </table>
+    </div>
+    <div class="card">
+      <div class="muted" style="margin-bottom:8px">Documentos do paciente (não vinculados a um atendimento específico)</div>
+      <div id="docs-paciente-lista">${renderDocumentosCards(documentosGerais)}</div>
+      <div class="divider"></div>
+      ${formularioUploadHtml('doc-pac', null)}
+    </div>
+    <div id="atendimento-detalhe"></div>
+  `;
+  document.getElementById('ir-atendimento').addEventListener('click', () => go('atendimento'));
+  document.querySelectorAll('[data-atendimento]').forEach(tr => {
+    tr.addEventListener('click', () => abrirAtendimentoDetalhe(tr.dataset.atendimento, pacienteId));
+  });
+  wireUploadForm('doc-pac', { paciente_id: pacienteId, atendimento_id: null }, () => abrirProntuario(pacienteId));
+  wireRemoverDocumentos(() => abrirProntuario(pacienteId));
+}
+
+async function abrirAtendimentoDetalhe(atendimentoId, pacienteId) {
+  const a = await sb(sbClient.from('atendimentos').select('*, especialidades(nome)').eq('id', atendimentoId).single());
+  const lesoes = await sb(sbClient.from('lesoes_estomatologicas')
+    .select('*, regioes_stomatograma(nome, lado, painel)').eq('atendimento_id', atendimentoId).order('id', { ascending: false }));
+  const logs = await sb(sbClient.from('auditoria').select('*').eq('atendimento_id', atendimentoId).order('id', { ascending: false }));
+  const documentos = await sb(sbClient.from('documentos').select('*').eq('atendimento_id', atendimentoId).order('id', { ascending: false }));
+
+  const box = document.getElementById('atendimento-detalhe');
+  box.innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <h3 style="margin:0">Atendimento #${a.id} <span class="badge badge-progress">${a.especialidades?.nome || 'sem especialidade'}</span></h3>
+        <button class="btn btn-ghost btn-sm" id="voltar-prontuario">← Voltar ao prontuário</button>
+      </div>
+      <div class="grid2">
+        <div><div class="muted">Queixa principal</div><div>${a.queixa_principal || '—'}</div></div>
+        <div><div class="muted">Status</div><div>${a.status}</div></div>
+        <div><div class="muted">Achados clínicos</div><div>${a.achados_clinicos || '—'}</div></div>
+        <div><div class="muted">Procedimentos</div><div>${a.procedimentos || '—'}</div></div>
+        <div><div class="muted">Evolução</div><div>${a.evolucao || '—'}</div></div>
+        <div><div class="muted">Hipótese diagnóstica</div><div>${a.hipotese_diagnostica || '—'}</div></div>
+        <div><div class="muted">Diagnóstico</div><div>${a.diagnostico || '—'}</div></div>
+      </div>
+      ${a.especialidades?.nome === 'Estomatologia' ? `
+        <div class="divider"></div>
+        <div class="muted" style="margin-bottom:8px">Lesões do stomatograma (${lesoes.length})</div>
+        ${lesoes.length ? lesoes.map(l => `
+          <div class="lesao-item">
+            <div class="rgn">${l.regioes_stomatograma.nome}${l.regioes_stomatograma.lado && l.regioes_stomatograma.lado !== 'central' ? ' · ' + l.regioes_stomatograma.lado : ''}</div>
+            <div>${[l.lesao_fundamental, l.tamanho, l.coloracao].filter(Boolean).join(' · ') || 'sem detalhes preenchidos'}</div>
+          </div>`).join('') : `<div class="empty-state">Nenhuma lesão registrada.</div>`}
+        <button class="btn btn-ghost btn-sm" id="ir-stoma-detalhe" style="margin-top:8px">Abrir stomatograma deste atendimento</button>
+      ` : ''}
+      <div class="divider"></div>
+      <div class="muted" style="margin-bottom:8px">Documentos deste atendimento</div>
+      <div id="docs-atendimento-lista">${renderDocumentosCards(documentos)}</div>
+      <div class="divider"></div>
+      ${formularioUploadHtml('doc-atd', a.especialidades?.nome === 'Estomatologia' ? lesoes : null)}
+      <div class="divider"></div>
+      <div class="muted" style="margin-bottom:8px">Histórico de alterações neste atendimento</div>
+      <table>
+        <tr><th>Quando</th><th>Campo</th><th>Antes</th><th>Depois</th><th>Usuário</th></tr>
+        ${logs.filter(l => l.campo).map(l => `
+          <tr><td class="mono">${l.criado_em}</td><td>${l.campo}</td><td>${l.valor_anterior || '—'}</td><td>${l.valor_novo || '—'}</td><td>${l.usuario}</td></tr>
+        `).join('') || `<tr><td colspan="5" class="empty-state">Nenhuma alteração registrada ainda neste atendimento.</td></tr>`}
+      </table>
+    </div>`;
+
+  document.getElementById('voltar-prontuario').addEventListener('click', () => abrirProntuario(pacienteId));
+  const stomaBtn = document.getElementById('ir-stoma-detalhe');
+  if (stomaBtn) stomaBtn.addEventListener('click', () => { state.atendimentoAtual = { id: a.id }; go('stomatograma'); });
+  wireUploadForm('doc-atd', { paciente_id: pacienteId, atendimento_id: atendimentoId }, () => abrirAtendimentoDetalhe(atendimentoId, pacienteId));
+  wireRemoverDocumentos(() => abrirAtendimentoDetalhe(atendimentoId, pacienteId));
+}
+
+// ============================= ATENDIMENTO =============================
+async function renderAtendimento() {
+  await ensureEspecialidades();
+  const pacientes = await sb(sbClient.from('pacientes').select('id,codigo,nome').order('id', { ascending: false }));
+  $main.innerHTML = `
+    <div class="eyebrow">Sessão clínica</div>
+    <h2>Novo atendimento</h2>
+    <div class="card">
+      <div class="grid2">
+        <div class="field">
+          <label>Paciente</label>
+          <select id="a-paciente">
+            <option value="">Selecione...</option>
+            ${pacientes.map(p => `<option value="${p.id}" ${state.pacienteAtual && state.pacienteAtual.id === p.id ? 'selected' : ''}>${p.codigo} — ${p.nome}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Especialidade</label>
+          <select id="a-especialidade">
+            ${state.especialidades.map(e => `<option value="${e.id}">${e.nome}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>Aluno</label><input id="a-aluno" placeholder="Nome (RA)"></div>
+        <div class="field"><label>Professor supervisor</label><input id="a-professor" placeholder="Nome (CRO)"></div>
+        <div class="field" style="grid-column:1/-1"><label>Queixa principal</label><textarea id="a-queixa"></textarea></div>
+        <div class="field" style="grid-column:1/-1"><label>História da doença atual</label><textarea id="a-hda"></textarea></div>
+      </div>
+      <button class="btn btn-primary" id="btn-criar-atendimento">Criar atendimento</button>
+    </div>
+    <div id="atendimento-criado"></div>
+  `;
+
+  document.getElementById('btn-criar-atendimento').addEventListener('click', async () => {
+    const paciente_id = document.getElementById('a-paciente').value;
+    if (!paciente_id) { toast('Selecione um paciente'); return; }
+    const especialidade_id = document.getElementById('a-especialidade').value;
+    const atendimento = await sb(sbClient.from('atendimentos').insert({
+      paciente_id, especialidade_id,
+      aluno: v('a-aluno'), professor: v('a-professor'), queixa_principal: v('a-queixa'), hda: v('a-hda'),
+      status: 'em_atendimento',
+    }).select().single());
+    await logAcao('criou', 'atendimento', atendimento.id);
+    state.atendimentoAtual = atendimento;
+    toast('Atendimento criado');
+    renderAtendimentoCriado(atendimento);
+  });
+}
+
+function renderAtendimentoCriado(atendimento) {
+  const esp = state.especialidades.find(e => e.id == atendimento.especialidade_id);
+  document.getElementById('atendimento-criado').innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <h3 style="margin:0">Atendimento #${atendimento.id} <span class="badge badge-progress">Sessão ${atendimento.numero_sessao}</span></h3>
+        ${esp && esp.nome === 'Estomatologia' ? `<button class="btn btn-primary btn-sm" id="ir-stoma">Abrir stomatograma</button>` : ''}
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Achados clínicos</label><textarea id="e-achados"></textarea></div>
+        <div class="field"><label>Procedimentos</label><textarea id="e-proc"></textarea></div>
+        <div class="field"><label>Evolução</label><textarea id="e-evol"></textarea></div>
+        <div class="field"><label>Hipótese diagnóstica</label><input id="e-hipotese"></div>
+        <div class="field"><label>Diagnóstico</label><input id="e-diag"></div>
+      </div>
+      <button class="btn btn-ghost" id="btn-salvar-evolucao">Salvar evolução</button>
+    </div>`;
+  const btnStoma = document.getElementById('ir-stoma');
+  if (btnStoma) btnStoma.addEventListener('click', () => go('stomatograma'));
+
+  document.getElementById('btn-salvar-evolucao').addEventListener('click', async () => {
+    const campos = {
+      achados_clinicos: v('e-achados'), procedimentos: v('e-proc'), evolucao: v('e-evol'),
+      hipotese_diagnostica: v('e-hipotese'), diagnostico: v('e-diag'),
+    };
+    const atual = await sb(sbClient.from('atendimentos').select('*').eq('id', atendimento.id).single());
+    for (const [campo, novo] of Object.entries(campos)) {
+      await logCampo(atendimento.id, campo, atual[campo], novo);
+    }
+    await sb(sbClient.from('atendimentos').update(campos).eq('id', atendimento.id));
+    toast('Evolução salva no Supabase');
+  });
+}
+
+// ============================= DOCUMENTOS / ANEXOS =============================
+const CATEGORIAS_DOC = ['Fotografia', 'Radiografia', 'Exame', 'Documento', 'Imagem de lesão', 'Outro'];
+const LIMITE_DOC_BYTES = 25 * 1024 * 1024; // 25MB, mesmo limite configurado no bucket
+
+function formatBytes(bytes) {
+  if (!bytes) return '';
+  const mb = bytes / (1024 * 1024);
+  if (mb >= 1) return mb.toFixed(1) + ' MB';
+  return Math.max(1, Math.round(bytes / 1024)) + ' KB';
+}
+
+function publicUrlDoc(path) {
+  return sbClient.storage.from('documentos').getPublicUrl(path).data.publicUrl;
+}
+
+function renderDocumentosCards(docs) {
+  if (!docs.length) return `<div class="empty-state">Nenhum documento anexado ainda.</div>`;
+  return `<div style="display:flex;flex-wrap:wrap;gap:12px;">` + docs.map(d => {
+    const url = publicUrlDoc(d.storage_path);
+    const isImg = d.tipo_mime && d.tipo_mime.startsWith('image/');
+    const isPdf = d.tipo_mime === 'application/pdf';
+    return `
+      <div style="width:150px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#fff;">
+        <a href="${url}" target="_blank" rel="noopener" title="Abrir ${d.nome_arquivo}">
+          ${isImg
+            ? `<img src="${url}" style="width:100%;height:100px;object-fit:cover;display:block;">`
+            : `<div style="width:100%;height:100px;background:var(--surface-alt);display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-faint);">${isPdf ? 'PDF' : 'ARQUIVO'}</div>`}
+        </a>
+        <div style="padding:8px;">
+          <div style="font-size:11.5px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d.nome_arquivo}">${d.nome_arquivo}</div>
+          <div style="font-size:10px;color:var(--ink-faint);margin:2px 0 6px;">${d.categoria || 'Sem categoria'}${d.tamanho_bytes ? ' · ' + formatBytes(d.tamanho_bytes) : ''}</div>
+          <button class="btn btn-danger btn-sm" style="width:100%;" data-del-doc="${d.id}" data-del-path="${d.storage_path}">Remover</button>
+        </div>
+      </div>`;
+  }).join('') + `</div>`;
+}
+
+function formularioUploadHtml(idPrefix, lesoes) {
+  return `
+    <div class="grid2" style="margin-top:8px;">
+      <div class="field"><label>Arquivo (até 25MB)</label><input type="file" id="${idPrefix}-file"></div>
+      <div class="field"><label>Categoria</label>
+        <select id="${idPrefix}-categoria">${CATEGORIAS_DOC.map(c => `<option>${c}</option>`).join('')}</select>
+      </div>
+      ${lesoes && lesoes.length ? `
+      <div class="field" style="grid-column:1/-1"><label>Vincular a uma lesão do stomatograma (opcional)</label>
+        <select id="${idPrefix}-lesao">
+          <option value="">Nenhuma</option>
+          ${lesoes.map(l => `<option value="${l.id}">${l.regioes_stomatograma.nome}${l.regioes_stomatograma.lado && l.regioes_stomatograma.lado !== 'central' ? ' · ' + l.regioes_stomatograma.lado : ''}</option>`).join('')}
+        </select>
+      </div>` : ''}
+      <div class="field" style="grid-column:1/-1"><label>Descrição</label><input id="${idPrefix}-desc" placeholder="opcional"></div>
+    </div>
+    <button class="btn btn-primary btn-sm" id="${idPrefix}-btn">Enviar arquivo</button>
+  `;
+}
+
+function wireUploadForm(idPrefix, { paciente_id, atendimento_id }, onDone) {
+  const btn = document.getElementById(`${idPrefix}-btn`);
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const fileInput = document.getElementById(`${idPrefix}-file`);
+    const file = fileInput.files[0];
+    if (!file) { toast('Escolha um arquivo primeiro'); return; }
+    if (file.size > LIMITE_DOC_BYTES) { toast('Arquivo maior que 25MB — não é possível enviar'); return; }
+
+    btn.disabled = true; btn.textContent = 'Enviando...';
+    try {
+      const categoria = document.getElementById(`${idPrefix}-categoria`).value;
+      const desc = v(`${idPrefix}-desc`);
+      const lesaoSel = document.getElementById(`${idPrefix}-lesao`);
+      const lesao_id = lesaoSel && lesaoSel.value ? lesaoSel.value : null;
+
+      const nomeSeguro = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `${paciente_id}/${atendimento_id || 'geral'}/${Date.now()}_${nomeSeguro}`;
+
+      await sb(sbClient.storage.from('documentos').upload(path, file, { contentType: file.type || 'application/octet-stream' }));
+
+      const doc = await sb(sbClient.from('documentos').insert({
+        paciente_id, atendimento_id: atendimento_id || null, lesao_id,
+        nome_arquivo: file.name, tipo_mime: file.type || null, categoria,
+        storage_path: path, tamanho_bytes: file.size, descricao: desc, enviado_por: usuarioAtual(),
+      }).select().single());
+
+      await logAcao('anexou', 'documento', doc.id);
+      toast('Arquivo enviado');
+      onDone();
+    } finally {
+      btn.disabled = false; btn.textContent = 'Enviar arquivo';
+    }
+  });
+}
+
+function wireRemoverDocumentos(onDone) {
+  document.querySelectorAll('[data-del-doc]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Remover este documento? Essa ação não pode ser desfeita.')) return;
+      await sb(sbClient.storage.from('documentos').remove([btn.dataset.delPath]));
+      await sb(sbClient.from('documentos').delete().eq('id', btn.dataset.delDoc));
+      await logAcao('removeu', 'documento', btn.dataset.delDoc);
+      toast('Documento removido');
+      onDone();
+    });
+  });
+}
+
+// ============================= STOMATOGRAMA =============================
+async function renderStomatograma() {
+  await ensureRegioes();
+  // só atendimentos cuja especialidade é Estomatologia (item 3 dos requisitos)
+  const atendimentos = await sb(sbClient.from('atendimentos')
+    .select('*, especialidades!inner(nome), pacientes(codigo)')
+    .eq('especialidades.nome', 'Estomatologia')
+    .order('id', { ascending: false }));
+
+  const atendimentosOptions = atendimentos.map(a =>
+    `<option value="${a.id}" ${state.atendimentoAtual && state.atendimentoAtual.id == a.id ? 'selected' : ''}>${a.pacientes?.codigo || '?'} — atendimento #${a.id}</option>`
+  ).join('');
+
+  $main.innerHTML = `
+    <div class="eyebrow">Estomatologia</div>
+    <h2>Stomatograma</h2>
+    <div class="card">
+      <div class="muted" style="margin-bottom:10px">O stomatograma só fica disponível para atendimentos cuja especialidade seja Estomatologia.</div>
+      <div class="field" style="max-width:520px">
+        <label>Atendimento</label>
+        <select id="s-atendimento">
+          <option value="">Selecione um atendimento...</option>
+          ${atendimentosOptions}
+        </select>
+      </div>
+      ${!atendimentosOptions ? `<div class="empty-state">Nenhum atendimento de Estomatologia encontrado ainda. Crie um atendimento escolhendo essa especialidade primeiro.</div>` : ''}
+    </div>
+    <div id="stoma-body"></div>
+  `;
+
+  const sel = document.getElementById('s-atendimento');
+  sel.addEventListener('change', () => loadStomaFor(sel.value));
+  if (state.atendimentoAtual) loadStomaFor(state.atendimentoAtual.id);
+}
+
+function regionSvg() {
+  return `
+  <svg viewBox="0 0 1300 500" id="stoma-svg" xmlns="http://www.w3.org/2000/svg">
+  <text x="320" y="20" class="stoma-title" text-anchor="middle">Vista frontal (mapa superior)</text>
+  <g transform="translate(20,45)">
+    <path class="region" data-nome="Lábio (superior)" data-lado="central" data-painel="frontal"
+      d="M 40,330 A 260,260 0 0 1 560,330 L 560,300 A 230,230 0 0 0 40,300 Z" />
+    <path class="region" data-nome="Mucosa labial (superior)" data-lado="central" data-painel="frontal"
+      d="M 40,300 A 230,230 0 0 1 560,300 L 560,270 A 205,205 0 0 0 40,270 Z" />
+    <path class="region" data-nome="Vestíbulo" data-lado="esquerda" data-painel="frontal"
+      d="M 40,270 A 205,205 0 0 1 300,68 L 300,98 A 175,175 0 0 0 65,270 Z" />
+    <path class="region" data-nome="Vestíbulo" data-lado="direita" data-painel="frontal"
+      d="M 300,68 A 205,205 0 0 1 560,270 L 535,270 A 175,175 0 0 0 300,98 Z" />
+    <path class="region" data-nome="Gengiva" data-lado="esquerda" data-painel="frontal"
+      d="M 65,270 A 175,175 0 0 1 300,98 L 300,128 A 145,145 0 0 0 90,270 Z" />
+    <path class="region" data-nome="Gengiva" data-lado="direita" data-painel="frontal"
+      d="M 300,98 A 175,175 0 0 1 535,270 L 510,270 A 145,145 0 0 0 300,128 Z" />
+    <path class="region" data-nome="Palato duro" data-lado="central" data-painel="frontal"
+      d="M 140,265 Q 300,150 460,265 Q 300,215 140,265 Z" />
+    <path class="region" data-nome="Palato mole" data-lado="central" data-painel="frontal"
+      d="M 175,258 Q 300,205 425,258 Q 300,235 175,258 Z" />
+    <polygon class="region" data-nome="Mucosa jugal" data-lado="esquerda" data-painel="frontal" points="40,300 5,300 -25,325 5,350 40,350"/>
+    <polygon class="region" data-nome="Mucosa jugal" data-lado="direita" data-painel="frontal" points="560,300 595,300 625,325 595,350 560,350"/>
+    <polygon class="region" data-nome="Comissura" data-lado="esquerda" data-painel="frontal" points="40,300 40,330 15,315"/>
+    <polygon class="region" data-nome="Comissura" data-lado="direita" data-painel="frontal" points="560,300 560,330 585,315"/>
+    <ellipse class="region" data-nome="Pilar anterior" data-lado="esquerda" data-painel="frontal" cx="235" cy="270" rx="16" ry="24"/>
+    <ellipse class="region" data-nome="Pilar anterior" data-lado="direita" data-painel="frontal" cx="365" cy="270" rx="16" ry="24"/>
+    <ellipse class="region" data-nome="Pilar posterior" data-lado="esquerda" data-painel="frontal" cx="205" cy="285" rx="14" ry="22"/>
+    <ellipse class="region" data-nome="Pilar posterior" data-lado="direita" data-painel="frontal" cx="395" cy="285" rx="14" ry="22"/>
+    <path class="region" data-nome="Língua (dorso)" data-lado="central" data-painel="frontal"
+      d="M 260,290 C 220,320 220,400 300,430 C 380,400 380,320 340,290 Z" />
+    <path class="region" data-nome="Língua lateral" data-lado="esquerda" data-painel="frontal"
+      d="M 260,290 C 235,315 230,370 255,405 C 240,360 245,320 275,295 Z" />
+    <path class="region" data-nome="Língua lateral" data-lado="direita" data-painel="frontal"
+      d="M 340,290 C 365,315 370,370 345,405 C 360,360 355,320 325,295 Z" />
+    <text x="40" y="365" class="stoma-lbl" text-anchor="middle">Direita</text>
+    <text x="560" y="365" class="stoma-lbl" text-anchor="middle">Esquerda</text>
+  </g>
+
+  <text x="980" y="20" class="stoma-title" text-anchor="middle">Vista ventral (soalho da boca)</text>
+  <g transform="translate(680,45)">
+    <path class="region" data-nome="Língua (ventre)" data-lado="central" data-painel="ventral"
+      d="M 300,60 C 220,60 190,160 210,210 L 390,210 C 410,160 380,60 300,60 Z" />
+    <path class="region" data-nome="Soalho de boca" data-lado="central" data-painel="ventral"
+      d="M 210,210 L 390,210 A 175,60 0 0 1 210,210 Z" />
+    <path class="region" data-nome="Vestíbulo" data-lado="esquerda" data-painel="ventral"
+      d="M 65,270 A 175,175 0 0 1 300,232 L 300,262 A 145,145 0 0 0 90,270 Z" />
+    <path class="region" data-nome="Vestíbulo" data-lado="direita" data-painel="ventral"
+      d="M 300,232 A 175,175 0 0 1 535,270 L 510,270 A 145,145 0 0 0 300,262 Z" />
+    <path class="region" data-nome="Gengiva" data-lado="esquerda" data-painel="ventral"
+      d="M 90,270 A 145,145 0 0 1 300,262 L 300,290 A 115,115 0 0 0 112,270 Z" />
+    <path class="region" data-nome="Gengiva" data-lado="direita" data-painel="ventral"
+      d="M 300,262 A 145,145 0 0 1 510,270 L 488,270 A 115,115 0 0 0 300,290 Z" />
+    <path class="region" data-nome="Mucosa labial (inferior)" data-lado="central" data-painel="ventral"
+      d="M 40,320 A 205,205 0 0 1 560,320 L 560,350 A 175,175 0 0 0 40,350 Z" />
+    <path class="region" data-nome="Lábio (inferior)" data-lado="central" data-painel="ventral"
+      d="M 40,350 A 175,175 0 0 1 560,350 L 560,380 A 145,145 0 0 0 40,380 Z" />
+    <text x="40" y="405" class="stoma-lbl" text-anchor="middle">Direita</text>
+    <text x="560" y="405" class="stoma-lbl" text-anchor="middle">Esquerda</text>
+  </g>
+  </svg>`;
+}
+
+function findRegiaoId(nome, lado, painel) {
+  const r = state.regioes.find(r => r.nome === nome && r.lado === lado && r.painel === painel);
+  return r ? r.id : null;
+}
+
+async function loadStomaFor(atendimentoId) {
+  if (!atendimentoId) { document.getElementById('stoma-body').innerHTML = ''; return; }
+  state.atendimentoAtual = { id: atendimentoId };
+  const lesoes = await sb(sbClient.from('lesoes_estomatologicas')
+    .select('*, regioes_stomatograma(nome, lado, painel)').eq('atendimento_id', atendimentoId).order('id', { ascending: false }));
+  renderStomaBody(atendimentoId, lesoes);
+}
+
+function renderStomaBody(atendimentoId, lesoes) {
+  document.getElementById('stoma-body').innerHTML = `
+    <div class="stoma-wrap">
+      <div class="stoma-svg-box card">${regionSvg()}</div>
+      <div class="lesoes-panel">
+        <div class="card">
+          <h3 style="margin:0 0 8px">Lesões registradas</h3>
+          <div id="lesoes-lista">
+            ${lesoes.length ? lesoes.map(l => `
+              <div class="lesao-item">
+                <div class="rgn">${l.regioes_stomatograma.nome}${l.regioes_stomatograma.lado && l.regioes_stomatograma.lado !== 'central' ? ' · ' + l.regioes_stomatograma.lado : ''}</div>
+                <div>${[l.lesao_fundamental, l.tamanho, l.coloracao].filter(Boolean).join(' · ') || 'sem detalhes preenchidos'}</div>
+                <button class="btn btn-danger btn-sm" style="margin-top:6px" data-del-lesao="${l.id}">Remover</button>
+              </div>`).join('') : `<div class="empty-state">Nenhuma lesão registrada ainda. Clique em uma região do desenho.</div>`}
+          </div>
+        </div>
+        <div class="card" id="lesao-form-box" style="display:none"></div>
+      </div>
+    </div>`;
+
+  document.querySelectorAll('.region').forEach(el => {
+    const nome = el.dataset.nome, lado = el.dataset.lado, painel = el.dataset.painel;
+    if (lesoes.some(l => l.regioes_stomatograma.nome === nome && l.regioes_stomatograma.lado === lado)) el.classList.add('has-lesao');
+    el.addEventListener('click', () => openLesaoForm(atendimentoId, nome, lado, painel, el));
+  });
+
+  document.querySelectorAll('[data-del-lesao]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await sb(sbClient.from('lesoes_estomatologicas').delete().eq('id', btn.dataset.delLesao));
+      await logAcao('removeu', 'lesao_estomatologica', btn.dataset.delLesao);
+      toast('Lesão removida');
+      loadStomaFor(atendimentoId);
+    });
+  });
+}
+
+function openLesaoForm(atendimentoId, nome, lado, painel, el) {
+  document.querySelectorAll('.region.selected').forEach(r => r.classList.remove('selected'));
+  el.classList.add('selected');
+  const box = document.getElementById('lesao-form-box');
+  box.style.display = 'block';
+  box.innerHTML = `
+    <h3 style="margin:0 0 4px">${nome}${lado && lado !== 'central' ? ' · ' + lado : ''}</h3>
+    <div class="muted" style="margin-bottom:10px">Registrar nova lesão nesta região</div>
+    <div class="field"><label>Lesão fundamental</label><input id="l-fund" placeholder="ex.: úlcera, mácula, nódulo..."></div>
+    <div class="field"><label>Tamanho</label><input id="l-tam"></div>
+    <div class="field"><label>Localização (detalhe)</label><input id="l-loc"></div>
+    <div class="field"><label>Duração</label><input id="l-dur"></div>
+    <div class="field"><label>Coloração</label><input id="l-cor"></div>
+    <div class="field"><label>Superfície</label><input id="l-sup"></div>
+    <div class="field"><label>Consistência</label><input id="l-cons"></div>
+    <div class="field"><label>Sensibilidade</label><input id="l-sens"></div>
+    <div class="field"><label>Formato</label><input id="l-form"></div>
+    <div class="field"><label>Limite</label><input id="l-lim"></div>
+    <div class="field"><label>Número</label><input id="l-num"></div>
+    <div class="field"><label>Lateralidade</label><input id="l-lat" value="${lado && lado !== 'central' ? lado : ''}"></div>
+    <div class="field"><label>Observações</label><textarea id="l-obs"></textarea></div>
+    <button class="btn btn-primary" id="btn-salvar-lesao">Salvar lesão</button>
+    <button class="btn btn-ghost" id="btn-cancelar-lesao">Cancelar</button>
+  `;
+  document.getElementById('btn-cancelar-lesao').addEventListener('click', () => { box.style.display = 'none'; el.classList.remove('selected'); });
+  document.getElementById('btn-salvar-lesao').addEventListener('click', async () => {
+    const regiao_id = findRegiaoId(nome, lado, painel);
+    if (!regiao_id) { toast('Região não encontrada no banco'); return; }
+    const lesao = await sb(sbClient.from('lesoes_estomatologicas').insert({
+      atendimento_id: atendimentoId, regiao_id,
+      lesao_fundamental: v('l-fund'), tamanho: v('l-tam'), localizacao: v('l-loc'), duracao: v('l-dur'),
+      coloracao: v('l-cor'), superficie: v('l-sup'), consistencia: v('l-cons'), sensibilidade: v('l-sens'),
+      formato: v('l-form'), limite: v('l-lim'), numero: v('l-num'), lateralidade: v('l-lat'), observacoes: v('l-obs'),
+    }).select().single());
+    await logAcao('registrou', 'lesao_estomatologica', lesao.id);
+    toast('Lesão salva no Supabase');
+    loadStomaFor(atendimentoId);
+  });
+}
+function v(id) { const val = document.getElementById(id).value; return val === '' ? null : val; }
+
+// ============================= ENCAMINHAMENTOS =============================
+async function renderEncaminhamentos() {
+  const pacientes = await sb(sbClient.from('pacientes').select('id,codigo,nome').order('id', { ascending: false }));
+  const lista = await sb(sbClient.from('encaminhamentos').select('*, pacientes(codigo,nome)').order('id', { ascending: false }));
+
+  $main.innerHTML = `
+    <div class="eyebrow">Comunicação externa</div>
+    <h2>Encaminhamentos</h2>
+    <div class="card">
+      <div class="field" style="max-width:420px"><label>Paciente</label>
+        <select id="enc-paciente">${pacientes.map(p => `<option value="${p.id}">${p.codigo} — ${p.nome}</option>`).join('')}</select>
+      </div>
+      <div class="pill-select">
+        <button class="active" data-origem="ubs">UBS</button>
+        <button data-origem="clinica_particular">Clínica particular</button>
+      </div>
+      <div id="enc-campos"></div>
+      <div class="field"><label>Motivo</label><textarea id="enc-motivo"></textarea></div>
+      <button class="btn btn-primary" id="btn-criar-encaminhamento">Registrar encaminhamento</button>
+    </div>
+    <div class="card">
+      <h3 style="margin:0 0 8px">Encaminhamentos registrados</h3>
+      <table>
+        <tr><th>Paciente</th><th>Origem</th><th>Responsável</th><th>Status</th></tr>
+        ${lista.map(e => `<tr><td>${e.pacientes?.codigo || '—'} — ${e.pacientes?.nome || '—'}</td><td><span class="badge ${e.origem_tipo === 'ubs' ? 'badge-progress' : 'badge-done'}">${e.origem_tipo === 'ubs' ? 'UBS' : 'Clínica particular'}</span></td><td>${e.nome_origem || '—'}</td><td>${e.status}</td></tr>`).join('') || `<tr><td colspan="4" class="empty-state">Nenhum encaminhamento ainda.</td></tr>`}
+      </table>
+    </div>
+  `;
+
+  let origemAtual = 'ubs';
+  function camposUBS() {
+    return `
+      <div class="grid2">
+        <div class="field"><label>Nome da UBS</label><input id="enc-nome"></div>
+        <div class="field"><label>Profissional responsável</label><input id="enc-resp"></div>
+      </div>`;
+  }
+  function camposParticular() {
+    return `
+      <div class="grid2">
+        <div class="field"><label>Nome da clínica</label><input id="enc-nome"></div>
+        <div class="field"><label>Cirurgião-dentista responsável</label><input id="enc-resp"></div>
+        <div class="field"><label>CRO</label><input id="enc-cro"></div>
+        <div class="field"><label>Telefone</label><input id="enc-tel"></div>
+        <div class="field" style="grid-column:1/-1"><label>Endereço</label><input id="enc-end"></div>
+      </div>`;
+  }
+  function renderCampos() {
+    document.getElementById('enc-campos').innerHTML = origemAtual === 'ubs' ? camposUBS() : camposParticular();
+  }
+  renderCampos();
+
+  document.querySelectorAll('[data-origem]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-origem]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      origemAtual = btn.dataset.origem;
+      renderCampos();
+    });
+  });
+
+  document.getElementById('btn-criar-encaminhamento').addEventListener('click', async () => {
+    const paciente_id = document.getElementById('enc-paciente').value;
+    const encaminhamento = await sb(sbClient.from('encaminhamentos').insert({
+      paciente_id, origem_tipo: origemAtual, motivo: v('enc-motivo'),
+      nome_origem: v('enc-nome'), responsavel: v('enc-resp'),
+      cro: document.getElementById('enc-cro') ? v('enc-cro') : null,
+      telefone: document.getElementById('enc-tel') ? v('enc-tel') : null,
+      endereco: document.getElementById('enc-end') ? v('enc-end') : null,
+    }).select().single());
+    await logAcao('criou', 'encaminhamento', encaminhamento.id);
+    toast('Encaminhamento registrado');
+    renderEncaminhamentos();
+  });
+}
+
+// ============================= AUDITORIA =============================
+async function renderAuditoria() {
+  const logs = await sb(sbClient.from('auditoria').select('*').order('id', { ascending: false }).limit(150));
+  $main.innerHTML = `
+    <div class="eyebrow">Rastreabilidade</div>
+    <h2>Auditoria</h2>
+    <div class="card">
+      <table>
+        <tr><th>Quando</th><th>Usuário</th><th>Ação</th><th>Campo</th><th>Antes → Depois</th><th>Entidade</th></tr>
+        ${logs.map(l => `<tr>
+          <td class="mono">${l.criado_em}</td><td>${l.usuario}</td><td>${l.acao}</td>
+          <td>${l.campo || '—'}</td>
+          <td>${l.campo ? `${l.valor_anterior || '—'} → ${l.valor_novo || '—'}` : '—'}</td>
+          <td>${l.entidade} ${l.entidade_id ? '#' + l.entidade_id : ''}</td>
+        </tr>`).join('') || `<tr><td colspan="6" class="empty-state">Sem eventos ainda.</td></tr>`}
+      </table>
+    </div>`;
+}
+
+// ---------- boot ----------
+if (initError) {
+  showFatalError(initError);
+} else {
+  checarConexao().then(ok => { if (ok) go('pacientes'); });
+}
+
+</script>
+</body>
+</html>
