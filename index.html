@@ -261,16 +261,24 @@ async function renderPacientes() {
 
     <div class="card">
       <div class="card-head"><h3 style="margin:0">Novo cadastro</h3></div>
+      <div class="muted" style="margin-bottom:10px">Campos da Ficha SUS de identificação. Depois de salvar, abra o paciente para preencher a Anamnese (identificação complementar, histórico médico e exame físico).</div>
       <div class="grid2">
         <div class="field"><label>Nome completo</label><input id="p-nome" placeholder="Nome fictício"></div>
         <div class="field"><label>CPF</label><input id="p-cpf" placeholder="000.000.000-00"></div>
         <div class="field"><label>Data de nascimento</label><input id="p-nasc" placeholder="dd/mm/aaaa"></div>
+        <div class="field"><label>Sexo</label>
+          <select id="p-sexo"><option value="">Selecione...</option><option>Feminino</option><option>Masculino</option></select>
+        </div>
+        <div class="field"><label>Cor/etnia</label>
+          <select id="p-cor-etnia">
+            <option value="">Selecione...</option>
+            <option>Leucoderma</option><option>Feoderma</option><option>Melanoderma</option><option>Xantoderma</option><option>Indígena</option>
+          </select>
+        </div>
+        <div class="field"><label>Cartão Nacional de Saúde (CNS)</label><input id="p-cns"></div>
         <div class="field"><label>Telefone</label><input id="p-tel"></div>
+        <div class="field"><label>Município</label><input id="p-municipio"></div>
         <div class="field" style="grid-column:1/-1"><label>Endereço</label><input id="p-end"></div>
-        <div class="field"><label>Alergias</label><input id="p-alerg"></div>
-        <div class="field"><label>Comorbidades</label><input id="p-comorb"></div>
-        <div class="field"><label>Medicamentos</label><input id="p-med"></div>
-        <div class="field"><label>Hábitos</label><input id="p-hab"></div>
       </div>
       <button class="btn btn-primary" id="btn-criar-paciente">Salvar cadastro</button>
     </div>
@@ -297,7 +305,7 @@ async function renderPacientes() {
     if (!nome) { toast('Informe o nome do paciente'); return; }
     const criado = await sb(sbClient.from('pacientes').insert({
       nome, cpf: v('p-cpf'), data_nascimento: v('p-nasc'), telefone: v('p-tel'), endereco: v('p-end'),
-      alergias: v('p-alerg'), comorbidades: v('p-comorb'), medicamentos: v('p-med'), habitos: v('p-hab'),
+      sexo: v('p-sexo'), cor_etnia: v('p-cor-etnia'), cns: v('p-cns'), municipio: v('p-municipio'),
     }).select().single());
     await logAcao('criou', 'paciente', criado.id);
     toast('Paciente cadastrado');
@@ -332,23 +340,30 @@ async function abrirProntuario(pacienteId) {
     .select('*').eq('paciente_id', pacienteId).order('id', { ascending: false }));
   const documentosGerais = await sb(sbClient.from('documentos')
     .select('*').eq('paciente_id', pacienteId).is('atendimento_id', null).order('id', { ascending: false }));
+  const anamnese = await fetchAnamnese(pacienteId);
   state.pacienteAtual = paciente;
 
   const box = document.getElementById('detalhe-paciente');
   box.innerHTML = `
     <div class="card">
       <div class="card-head">
-        <h3 style="margin:0">${paciente.nome} <span class="badge badge-code mono">${paciente.codigo}</span></h3>
-        <div style="display:flex;gap:8px;">
+        <h3 style="margin:0">${paciente.nome} <span class="badge badge-code mono">${paciente.codigo}</span> ${anamnese ? '' : '<span class="badge badge-wait">Anamnese pendente</span>'}</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-ghost btn-sm" id="editar-cadastro">Editar cadastro</button>
+          <button class="btn btn-ghost btn-sm" id="ir-anamnese">${anamnese ? 'Ver/editar anamnese' : 'Preencher anamnese'}</button>
           <button class="btn btn-ghost btn-sm" id="baixar-ficha-completa">Baixar ficha completa (PDF)</button>
           <button class="btn btn-primary btn-sm" id="ir-atendimento">Novo atendimento</button>
         </div>
       </div>
       <div class="grid3">
-        <div><div class="muted">Alergias</div><div>${paciente.alergias || '—'}</div></div>
-        <div><div class="muted">Comorbidades</div><div>${paciente.comorbidades || '—'}</div></div>
-        <div><div class="muted">Medicamentos</div><div>${paciente.medicamentos || '—'}</div></div>
+        <div><div class="muted">CPF</div><div>${paciente.cpf || '—'}</div></div>
+        <div><div class="muted">Nascimento</div><div>${paciente.data_nascimento || '—'}${paciente.sexo ? ' · ' + paciente.sexo : ''}</div></div>
+        <div><div class="muted">Cor/etnia</div><div>${paciente.cor_etnia || '—'}</div></div>
+        <div><div class="muted">CNS</div><div>${paciente.cns || '—'}</div></div>
+        <div><div class="muted">Telefone</div><div>${paciente.telefone || '—'}</div></div>
+        <div><div class="muted">Município</div><div>${paciente.municipio || '—'}</div></div>
       </div>
+      <div class="muted" style="font-size:11px;margin-top:2px;">Alergias, comorbidades, medicamentos e hábitos ficam na Anamnese do paciente (preenchida uma única vez, na triagem) — não mais em cada atendimento.</div>
       <div class="divider"></div>
       <div class="muted" style="margin-bottom:8px">Prontuário · histórico de atendimentos (clique para abrir)</div>
       <table>
@@ -356,7 +371,7 @@ async function abrirProntuario(pacienteId) {
         ${atendimentos.map(a => `
           <tr class="clickable" data-atendimento="${a.id}">
             <td class="mono">${a.numero_sessao}</td><td>${a.especialidades?.nome || '—'}</td>
-            <td><span class="badge badge-progress">${a.status}</span></td><td>${a.criado_em}</td>
+            <td>${badgeStatusAtendimento(a)}</td><td>${a.criado_em}</td>
           </tr>`).join('') || `<tr><td colspan="4" class="empty-state">Nenhum atendimento ainda.</td></tr>`}
       </table>
       <div class="divider"></div>
@@ -379,6 +394,8 @@ async function abrirProntuario(pacienteId) {
     <div id="atendimento-detalhe"></div>
   `;
   document.getElementById('ir-atendimento').addEventListener('click', () => go('atendimento'));
+  document.getElementById('editar-cadastro').addEventListener('click', () => abrirEdicaoPaciente(pacienteId));
+  document.getElementById('ir-anamnese').addEventListener('click', () => abrirAnamnese(pacienteId));
   document.getElementById('baixar-ficha-completa').addEventListener('click', (e) => {
     e.target.disabled = true; e.target.textContent = 'Gerando...';
     gerarRelatorioCompletoPaciente(pacienteId).finally(() => { e.target.disabled = false; e.target.textContent = 'Baixar ficha completa (PDF)'; });
@@ -390,79 +407,559 @@ async function abrirProntuario(pacienteId) {
   wireDocumentosCards(documentosGerais, () => abrirProntuario(pacienteId));
 }
 
+function escAttr(s) { return s === null || s === undefined ? '' : String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;'); }
+function escHtml(s) { return s === null || s === undefined ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+// ---------- helpers de anamnese (campos sim/não/não-informado) ----------
+function selSimNao(id, valorAtual) {
+  return `<select id="${id}">
+    <option value="">Não informado</option>
+    <option value="sim" ${valorAtual === true ? 'selected' : ''}>Sim</option>
+    <option value="nao" ${valorAtual === false ? 'selected' : ''}>Não</option>
+  </select>`;
+}
+function vBool(id) {
+  const val = document.getElementById(id).value;
+  if (val === 'sim') return true;
+  if (val === 'nao') return false;
+  return null;
+}
+function simNaoTexto(valor) { return valor === true ? 'Sim' : valor === false ? 'Não' : '—'; }
+function campoDoenca(id, label, val) {
+  return `<div class="field"><label>${label}</label>${selSimNao(id, val)}</div>`;
+}
+async function fetchAnamnese(pacienteId) {
+  return await sb(sbClient.from('anamneses').select('*').eq('paciente_id', pacienteId).maybeSingle());
+}
+// Resumo compacto (alertas + link) usado tanto na tela de Atendimento quanto no prontuário.
+function renderResumoAnamneseHtml(anamnese, pacienteId) {
+  if (!anamnese) {
+    return `<div class="badge badge-wait" style="margin-bottom:8px;">Anamnese ainda não preenchida</div>
+      <div><button class="btn btn-ghost btn-sm" data-ir-anamnese="${pacienteId}">Preencher anamnese agora</button></div>`;
+  }
+  const alertas = [];
+  if (anamnese.doenca_alergia) alertas.push('Alergia' + (anamnese.doenca_alergia_qual ? ': ' + anamnese.doenca_alergia_qual : ''));
+  if (anamnese.medicamento_atual) alertas.push('Em uso de medicamento' + (anamnese.medicamento_atual_qual ? ': ' + anamnese.medicamento_atual_qual : ''));
+  if (anamnese.doenca_cardiopatia) alertas.push('Cardiopatia');
+  if (anamnese.doenca_diabete) alertas.push('Diabete');
+  if (anamnese.doenca_hemorragia || anamnese.transfusao_sanguinea) alertas.push('Histórico de hemorragia/transfusão');
+  if (anamnese.esta_gravida) alertas.push('Gestante');
+  return `
+    <div class="grid2">
+      <div>
+        <div class="muted" style="margin-bottom:4px;">Alertas da anamnese</div>
+        ${alertas.length ? alertas.map(a => `<span class="badge badge-wait" style="margin:2px 6px 2px 0;">${a}</span>`).join('') : '<span class="muted">Nenhum alerta relevante registrado</span>'}
+      </div>
+      <div style="text-align:right;"><button class="btn btn-ghost btn-sm" data-ir-anamnese="${pacienteId}">Ver anamnese completa</button></div>
+    </div>`;
+}
+function wireResumoAnamneseLinks(container) {
+  container.querySelectorAll('[data-ir-anamnese]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const pid = btn.dataset.irAnamnese;
+      await go('pacientes');
+      await abrirProntuario(pid);
+      await abrirAnamnese(pid);
+    });
+  });
+}
+
+async function logCampoPaciente(paciente_id, campo, valorAnterior, valorNovo) {
+  const antes = valorAnterior === undefined || valorAnterior === null ? '' : String(valorAnterior);
+  const depois = valorNovo === undefined || valorNovo === null ? '' : String(valorNovo);
+  if (antes === depois) return;
+  await sb(sbClient.from('auditoria').insert({
+    usuario: usuarioAtual(), acao: 'alterou_campo', entidade: 'paciente',
+    entidade_id: paciente_id, atendimento_id: null, campo, valor_anterior: antes, valor_novo: depois,
+  }));
+}
+
+// Permite corrigir erros de digitação na Ficha SUS do paciente após o cadastro.
+async function abrirEdicaoPaciente(pacienteId) {
+  const paciente = await sb(sbClient.from('pacientes').select('*').eq('id', pacienteId).single());
+  const box = document.getElementById('detalhe-paciente');
+  box.innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <h3 style="margin:0">Editar cadastro <span class="badge badge-code mono">${paciente.codigo}</span></h3>
+      </div>
+      <div class="muted" style="margin-bottom:10px">Para corrigir erros de digitação na Ficha SUS. As alterações ficam registradas na auditoria.</div>
+      <div class="grid3">
+        <div class="field" style="grid-column:1/-1"><label>Nome completo</label><input id="pe-nome" value="${escAttr(paciente.nome)}"></div>
+        <div class="field"><label>CPF</label><input id="pe-cpf" value="${escAttr(paciente.cpf)}"></div>
+        <div class="field"><label>Data de nascimento</label><input id="pe-nasc" value="${escAttr(paciente.data_nascimento)}"></div>
+        <div class="field"><label>Sexo</label>
+          <select id="pe-sexo">
+            <option value="">Selecione...</option>
+            ${['Masculino', 'Feminino'].map(o => `<option ${paciente.sexo === o ? 'selected' : ''}>${o}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>Cor/etnia</label>
+          <select id="pe-cor-etnia">
+            <option value="">Selecione...</option>
+            ${['Leucoderma', 'Feoderma', 'Melanoderma', 'Xantoderma', 'Indígena'].map(o => `<option ${paciente.cor_etnia === o ? 'selected' : ''}>${o}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>Cartão Nacional de Saúde (CNS)</label><input id="pe-cns" value="${escAttr(paciente.cns)}"></div>
+        <div class="field"><label>Telefone</label><input id="pe-tel" value="${escAttr(paciente.telefone)}"></div>
+        <div class="field" style="grid-column:1/-1"><label>Endereço</label><input id="pe-end" value="${escAttr(paciente.endereco)}"></div>
+        <div class="field"><label>Município</label><input id="pe-municipio" value="${escAttr(paciente.municipio)}"></div>
+      </div>
+      <button class="btn btn-primary" id="btn-salvar-paciente">Salvar alterações</button>
+      <button class="btn btn-ghost" id="btn-cancelar-edicao-paciente">Cancelar</button>
+    </div>`;
+
+  document.getElementById('btn-cancelar-edicao-paciente').addEventListener('click', () => abrirProntuario(pacienteId));
+  document.getElementById('btn-salvar-paciente').addEventListener('click', async () => {
+    const payload = {
+      nome: v('pe-nome'), cpf: v('pe-cpf'), data_nascimento: v('pe-nasc'), sexo: v('pe-sexo'),
+      cor_etnia: v('pe-cor-etnia'), cns: v('pe-cns'), telefone: v('pe-tel'), endereco: v('pe-end'), municipio: v('pe-municipio'),
+    };
+    if (!payload.nome) { toast('Nome não pode ficar em branco'); return; }
+    for (const [campo, novo] of Object.entries(payload)) {
+      await logCampoPaciente(pacienteId, campo, paciente[campo], novo);
+    }
+    await sb(sbClient.from('pacientes').update(payload).eq('id', pacienteId));
+    toast('Cadastro atualizado');
+    abrirProntuario(pacienteId);
+  });
+}
+
+// ============================= ANAMNESE E EXAME FÍSICO =============================
+// Preenchida uma única vez por paciente, na triagem. Se já existir, a tela edita a
+// mesma linha (não cria uma segunda anamnese para o mesmo paciente).
+async function abrirAnamnese(pacienteId) {
+  const paciente = await sb(sbClient.from('pacientes').select('*').eq('id', pacienteId).single());
+  const anamnese = await fetchAnamnese(pacienteId);
+  const an = anamnese || {};
+  const box = document.getElementById('detalhe-paciente');
+
+  box.innerHTML = `
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="eyebrow">Triagem · ${paciente.codigo} — ${paciente.nome}</div>
+          <h3 style="margin:0">Anamnese e Exame Físico</h3>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="voltar-prontuario-anamnese">← Voltar ao prontuário</button>
+      </div>
+      <div class="muted" style="margin-bottom:14px;">Preenchida uma única vez, na triagem do paciente — substitui os campos de alergias/comorbidades/medicamentos/hábitos que antes ficavam em cada atendimento.</div>
+
+      <div class="muted" style="margin-bottom:8px">Já cadastrado na Ficha SUS do paciente (não repetir aqui)</div>
+      <div class="grid3" style="margin-bottom:6px;">
+        <div><div class="muted">Nome</div><div>${paciente.nome}</div></div>
+        <div><div class="muted">CPF</div><div>${paciente.cpf || '—'}</div></div>
+        <div><div class="muted">Nascimento / sexo</div><div>${paciente.data_nascimento || '—'}${paciente.sexo ? ' · ' + paciente.sexo : ''}</div></div>
+        <div><div class="muted">Telefone</div><div>${paciente.telefone || '—'}</div></div>
+        <div><div class="muted">Endereço</div><div>${paciente.endereco || '—'}</div></div>
+        <div><div class="muted">Município</div><div>${paciente.municipio || '—'}</div></div>
+      </div>
+      <div class="divider"></div>
+
+      <h3 style="font-size:14px;">Identificação complementar</h3>
+      <div class="grid3">
+        <div class="field"><label>R.G.</label><input id="an-rg" value="${escAttr(an.rg)}"></div>
+        <div class="field"><label>Idade</label><input id="an-idade" value="${escAttr(an.idade)}"></div>
+        <div class="field"><label>Estado civil</label>
+          <select id="an-estado-civil"><option value="">Selecione...</option>${['Solteiro(a)', 'Casado(a)', 'Outros'].map(o => `<option ${an.estado_civil === o ? 'selected' : ''}>${o}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Bairro</label><input id="an-bairro" value="${escAttr(an.bairro)}"></div>
+        <div class="field"><label>CEP</label><input id="an-cep" value="${escAttr(an.cep)}"></div>
+        <div class="field"><label>Outro telefone (recado)</label><input id="an-outro-telefone" value="${escAttr(an.outro_telefone)}"></div>
+        <div class="field"><label>Falar com</label><input id="an-falar-com" value="${escAttr(an.falar_com)}"></div>
+        <div class="field"><label>Profissão</label><input id="an-profissao" value="${escAttr(an.profissao)}"></div>
+        <div class="field"><label>Local de trabalho</label><input id="an-local-trabalho" value="${escAttr(an.local_trabalho)}"></div>
+        <div class="field" style="grid-column:1/-1"><label>Endereço do trabalho</label><input id="an-endereco-trabalho" value="${escAttr(an.endereco_trabalho)}"></div>
+        <div class="field"><label>Telefone do trabalho</label><input id="an-telefone-trabalho" value="${escAttr(an.telefone_trabalho)}"></div>
+        <div class="field"><label>Nacionalidade</label><input id="an-nacionalidade" value="${escAttr(an.nacionalidade)}"></div>
+        <div class="field"><label>Naturalidade</label><input id="an-naturalidade" value="${escAttr(an.naturalidade)}"></div>
+        <div class="field"><label>Procedência</label>
+          <select id="an-procedencia"><option value="">Selecione...</option>${['Zona urbana', 'Zona rural'].map(o => `<option ${an.procedencia === o ? 'selected' : ''}>${o}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Pai — nome</label><input id="an-pai-nome" value="${escAttr(an.pai_nome)}"></div>
+        <div class="field"><label>Pai — nacionalidade</label><input id="an-pai-nacionalidade" value="${escAttr(an.pai_nacionalidade)}"></div>
+        <div class="field"><label>Mãe — nome</label><input id="an-mae-nome" value="${escAttr(an.mae_nome)}"></div>
+        <div class="field"><label>Mãe — nacionalidade</label><input id="an-mae-nacionalidade" value="${escAttr(an.mae_nacionalidade)}"></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Contato de emergência — nome</label><input id="an-contato-nome" value="${escAttr(an.contato_emergencia_nome)}"></div>
+        <div class="field"><label>Contato de emergência — telefone</label><input id="an-contato-telefone" value="${escAttr(an.contato_emergencia_telefone)}"></div>
+        <div class="field"><label>Contato de emergência — endereço</label><input id="an-contato-endereco" value="${escAttr(an.contato_emergencia_endereco)}"></div>
+      </div>
+
+      <div class="divider"></div>
+      <h3 style="font-size:14px;">Autorização para tratamento</h3>
+      <div class="muted" style="margin-bottom:10px">Para pacientes menores de idade, é exigida a assinatura de um responsável.</div>
+      <div class="grid3">
+        <div class="field"><label>Documento apresentado — tipo</label><input id="an-doc-tipo" value="${escAttr(an.autorizacao_documento_tipo)}"></div>
+        <div class="field"><label>Documento apresentado — nº</label><input id="an-doc-numero" value="${escAttr(an.autorizacao_documento_numero)}"></div>
+        <div class="field"><label>Data da autorização</label><input id="an-autorizacao-data" placeholder="dd/mm/aaaa" value="${escAttr(an.autorizacao_data)}"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-soft);margin-bottom:14px;">
+        <input type="checkbox" id="an-autorizacao-assinatura" style="width:auto;" ${an.autorizacao_assinatura_coletada ? 'checked' : ''}> Assinatura de autorização coletada na ficha física
+      </label>
+
+      <div class="divider"></div>
+      <h3 style="font-size:14px;">História médica e antecedentes familiares</h3>
+      <div class="grid2">
+        <div class="field"><label>Está fazendo algum tratamento médico?</label>${selSimNao('an-tratamento-medico', an.tratamento_medico)}</div>
+        <div class="field"><label>Qual / nome e endereço do médico</label><input id="an-tratamento-medico-detalhe" value="${escAttr(an.tratamento_medico_detalhe)}"></div>
+        <div class="field"><label>Está tomando algum medicamento?</label>${selSimNao('an-medicamento-atual', an.medicamento_atual)}</div>
+        <div class="field"><label>Qual(is)</label><input id="an-medicamento-atual-qual" value="${escAttr(an.medicamento_atual_qual)}"></div>
+        <div class="field"><label>Já se submeteu a alguma cirurgia?</label>${selSimNao('an-cirurgia', an.cirurgia)}</div>
+        <div class="field"><label>Qual(is) e como foi</label><input id="an-cirurgia-detalhe" value="${escAttr(an.cirurgia_detalhe)}"></div>
+        <div class="field"><label>Já se submeteu a transfusão sanguínea?</label>${selSimNao('an-transfusao', an.transfusao_sanguinea)}</div>
+        <div class="field"><label>Quando / teve hemorragia</label><input id="an-transfusao-quando" value="${escAttr(an.transfusao_quando)}"></div>
+        <div class="field"><label>Já se submeteu a radioterapia?</label>${selSimNao('an-radioterapia', an.radioterapia)}</div>
+        <div class="field"><label>Quando / em que região</label><input id="an-radioterapia-detalhe" value="${escAttr(an.radioterapia_detalhe)}"></div>
+        <div class="field"><label>Segue algum regime alimentar especial?</label>${selSimNao('an-regime-alimentar', an.regime_alimentar)}</div>
+        <div class="field"><label>Descrever</label><input id="an-regime-alimentar-detalhe" value="${escAttr(an.regime_alimentar_detalhe)}"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-soft);margin:-6px 0 12px;">
+        <input type="checkbox" id="an-transfusao-hemorragia" style="width:auto;" ${an.teve_hemorragia_transfusao ? 'checked' : ''}> Teve hemorragia na transfusão
+      </label>
+
+      <div class="muted" style="margin:10px 0 8px;">Apresenta ou já apresentou alguma destas doenças?</div>
+      <div class="grid3">
+        ${campoDoenca('an-diabete', 'Diabete', an.doenca_diabete)}
+        ${campoDoenca('an-febre-reumatica', 'Febre reumática', an.doenca_febre_reumatica)}
+        ${campoDoenca('an-doenca-renal', 'Doença renal', an.doenca_renal)}
+        ${campoDoenca('an-cardiopatia', 'Cardiopatia', an.doenca_cardiopatia)}
+        ${campoDoenca('an-epilepsia', 'Epilepsia', an.doenca_epilepsia)}
+        ${campoDoenca('an-hepatite', 'Hepatite', an.doenca_hepatite)}
+        ${campoDoenca('an-hemorragia', 'Hemorragia', an.doenca_hemorragia)}
+        ${campoDoenca('an-doenca-mental', 'Doença mental (depressão, stress)', an.doenca_mental)}
+        ${campoDoenca('an-dst', 'Doença sexualmente transmissível', an.doenca_dst)}
+        ${campoDoenca('an-pulmonar', 'Doença pulmonar', an.doenca_pulmonar)}
+        ${campoDoenca('an-pressao', 'Problemas de pressão arterial', an.doenca_pressao_arterial)}
+        ${campoDoenca('an-gastrica', 'Doença gástrica (úlcera, gastrite)', an.doenca_gastrica)}
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Alergia — tem?</label>${selSimNao('an-alergia', an.doenca_alergia)}</div>
+        <div class="field"><label>Alergia — qual</label><input id="an-alergia-qual" value="${escAttr(an.doenca_alergia_qual)}"></div>
+        <div class="field"><label>Infecções (tuberculose, paracoccidioidomicose etc.) — tem?</label>${selSimNao('an-infeccoes', an.doenca_infeccoes)}</div>
+        <div class="field"><label>Infecções — qual</label><input id="an-infeccoes-qual" value="${escAttr(an.doenca_infeccoes_qual)}"></div>
+        <div class="field" style="grid-column:1/-1"><label>Outra doença mencionada</label><input id="an-outra-doenca" value="${escAttr(an.outra_doenca)}"></div>
+      </div>
+
+      <div class="muted" style="margin:10px 0 8px;">Saúde da mulher</div>
+      <div class="grid3">
+        <div class="field"><label>Ciclos menstruais normais?</label>${selSimNao('an-ciclos', an.ciclos_menstruais_normais)}</div>
+        <div class="field"><label>Método contraceptivo</label><input id="an-metodo-contraceptivo" value="${escAttr(an.metodo_contraceptivo)}"></div>
+        <div class="field"><label>Período</label><input id="an-periodo" value="${escAttr(an.periodo_menstrual)}"></div>
+        <div class="field"><label>Está grávida?</label>${selSimNao('an-gravida', an.esta_gravida)}</div>
+      </div>
+
+      <div class="divider"></div>
+      <h3 style="font-size:14px;">História buco-dental e hábitos de higiene</h3>
+      <div class="grid2">
+        <div class="field"><label>Já fez tratamento odontológico?</label>${selSimNao('an-trat-odonto', an.ja_fez_tratamento_odontologico)}</div>
+        <div class="field"><label>Houve algum problema? (relate)</label><input id="an-problema-odonto" value="${escAttr(an.problema_tratamento_odontologico)}"></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Escovação — frequência</label><input id="an-higiene-escovacao" value="${escAttr(an.higiene_escovacao_freq)}"></div>
+        <div class="field"><label>Fio dental — frequência</label><input id="an-higiene-fio" value="${escAttr(an.higiene_fio_dental_freq)}"></div>
+        <div class="field"><label>Enxaguatório — frequência</label><input id="an-higiene-enxaguatorio" value="${escAttr(an.higiene_enxaguatorio_freq)}"></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Gengiva sangra?</label>${selSimNao('an-gengiva-sangra', an.gengiva_sangra)}</div>
+        <div class="field"><label>Sente a boca seca?</label>${selSimNao('an-boca-seca', an.boca_seca)}</div>
+        <div class="field"><label>Sente dificuldade em mastigar?</label>${selSimNao('an-dificuldade-mastigar', an.dificuldade_mastigar)}</div>
+        <div class="field"><label>Seus dentes estão moles?</label>${selSimNao('an-dentes-moles', an.dentes_moles)}</div>
+        <div class="field"><label>Usa aparelho protético?</label>${selSimNao('an-usa-protese', an.usa_aparelho_protetico)}</div>
+        <div class="field"><label>Condição da prótese</label>
+          <select id="an-protese-condicao"><option value="">Selecione...</option>${['Boa', 'Ruim'].map(o => `<option ${an.protese_condicao === o ? 'selected' : ''}>${o}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Tipo de prótese (superior)</label><input id="an-protese-superior" placeholder="Total / PPR / muco-suportada" value="${escAttr(an.protese_tipo_superior)}"></div>
+        <div class="field"><label>Tipo de prótese (inferior)</label><input id="an-protese-inferior" placeholder="Total / PPR / muco-suportada" value="${escAttr(an.protese_tipo_inferior)}"></div>
+        <div class="field"><label>Trocas efetuadas</label><input id="an-protese-trocas" value="${escAttr(an.protese_trocas_efetuadas)}"></div>
+        <div class="field" style="grid-column:1/-1"><label>Motivo (se ruim / mal adaptada / quebrada)</label><input id="an-protese-motivo" value="${escAttr(an.protese_motivo)}"></div>
+      </div>
+
+      <div class="muted" style="margin:10px 0 8px;">Hábitos</div>
+      <div class="grid3">
+        <div class="field"><label>Fumante?</label>${selSimNao('an-fumante', an.fumante)}</div>
+        <div class="field"><label>Tempo (fumante)</label><input id="an-fumante-tempo" value="${escAttr(an.fumante_tempo)}"></div>
+        <div class="field"><label>Ex-fumante?</label>${selSimNao('an-ex-fumante', an.ex_fumante)}</div>
+        <div class="field"><label>Tempo (ex-fumante)</label><input id="an-ex-fumante-tempo" value="${escAttr(an.ex_fumante_tempo)}"></div>
+        <div class="field"><label>Álcool?</label>${selSimNao('an-etilista', an.etilista)}</div>
+        <div class="field"><label>Tempo (álcool)</label><input id="an-etilista-tempo" value="${escAttr(an.etilista_tempo)}"></div>
+        <div class="field"><label>Ex-etilista?</label>${selSimNao('an-ex-etilista', an.ex_etilista)}</div>
+        <div class="field"><label>Tempo (ex-etilista)</label><input id="an-ex-etilista-tempo" value="${escAttr(an.ex_etilista_tempo)}"></div>
+        <div class="field"><label>Outros hábitos</label><input id="an-outros-habitos" value="${escAttr(an.outros_habitos)}"></div>
+      </div>
+
+      <div class="divider"></div>
+      <h3 style="font-size:14px;">Exame físico</h3>
+      <div class="grid3">
+        <div class="field"><label>Pressão arterial</label><input id="an-exame-pa" value="${escAttr(an.exame_pressao_arterial)}"></div>
+        <div class="field"><label>Temperatura</label><input id="an-exame-temp" value="${escAttr(an.exame_temperatura)}"></div>
+        <div class="field"><label>Pulso</label><input id="an-exame-pulso" value="${escAttr(an.exame_pulso)}"></div>
+        <div class="field"><label>Peso</label><input id="an-exame-peso" value="${escAttr(an.exame_peso)}"></div>
+        <div class="field"><label>Altura</label><input id="an-exame-altura" value="${escAttr(an.exame_altura)}"></div>
+        <div class="field"><label>Tempo de sangramento</label><input id="an-exame-tsangramento" value="${escAttr(an.exame_tempo_sangramento)}"></div>
+        <div class="field"><label>Tempo de coagulação</label><input id="an-exame-tcoagulacao" value="${escAttr(an.exame_tempo_coagulacao)}"></div>
+        <div class="field"><label>Examinador</label><input id="an-exame-examinador" value="${escAttr(an.exame_examinador)}"></div>
+        <div class="field"><label>Disciplina</label><input id="an-exame-disciplina" value="${escAttr(an.exame_disciplina)}"></div>
+        <div class="field"><label>Data do exame</label><input id="an-exame-data" placeholder="dd/mm/aaaa" value="${escAttr(an.exame_data)}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field" style="grid-column:1/-1"><label>Extra-bucal (descrever alterações)</label><textarea id="an-exame-extra-bucal">${escHtml(an.exame_extra_bucal)}</textarea></div>
+        <div class="field" style="grid-column:1/-1"><label>Intra-bucal (descrever alterações)</label><textarea id="an-exame-intra-bucal">${escHtml(an.exame_intra_bucal)}</textarea></div>
+        <div class="field" style="grid-column:1/-1"><label>Exame radiográfico (descrever alterações)</label><textarea id="an-exame-radiografico">${escHtml(an.exame_radiografico)}</textarea></div>
+      </div>
+
+      <div class="divider"></div>
+      <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-soft);margin-bottom:14px;">
+        <input type="checkbox" id="an-ciente" style="width:auto;" ${an.ciente_veracidade ? 'checked' : ''}> Paciente/responsável ciente da veracidade das informações prestadas acima
+      </label>
+      <div class="field" style="max-width:220px;"><label>Data</label><input id="an-ciente-data" placeholder="dd/mm/aaaa" value="${escAttr(an.ciente_data)}"></div>
+
+      <button class="btn btn-primary" id="btn-salvar-anamnese">Salvar anamnese</button>
+      ${anamnese ? `<span class="muted" style="margin-left:10px;">Última atualização: ${anamnese.atualizado_em}</span>` : ''}
+    </div>
+  `;
+
+  document.getElementById('voltar-prontuario-anamnese').addEventListener('click', () => abrirProntuario(pacienteId));
+  document.getElementById('btn-salvar-anamnese').addEventListener('click', async () => {
+    const payload = {
+      paciente_id: pacienteId,
+      rg: v('an-rg'), idade: v('an-idade'), estado_civil: v('an-estado-civil'),
+      bairro: v('an-bairro'), cep: v('an-cep'), outro_telefone: v('an-outro-telefone'), falar_com: v('an-falar-com'),
+      profissao: v('an-profissao'), local_trabalho: v('an-local-trabalho'), endereco_trabalho: v('an-endereco-trabalho'), telefone_trabalho: v('an-telefone-trabalho'),
+      nacionalidade: v('an-nacionalidade'), naturalidade: v('an-naturalidade'), procedencia: v('an-procedencia'),
+      pai_nome: v('an-pai-nome'), pai_nacionalidade: v('an-pai-nacionalidade'), mae_nome: v('an-mae-nome'), mae_nacionalidade: v('an-mae-nacionalidade'),
+      contato_emergencia_nome: v('an-contato-nome'), contato_emergencia_telefone: v('an-contato-telefone'), contato_emergencia_endereco: v('an-contato-endereco'),
+      autorizacao_documento_tipo: v('an-doc-tipo'), autorizacao_documento_numero: v('an-doc-numero'), autorizacao_data: v('an-autorizacao-data'),
+      autorizacao_assinatura_coletada: document.getElementById('an-autorizacao-assinatura').checked,
+      tratamento_medico: vBool('an-tratamento-medico'), tratamento_medico_detalhe: v('an-tratamento-medico-detalhe'),
+      medicamento_atual: vBool('an-medicamento-atual'), medicamento_atual_qual: v('an-medicamento-atual-qual'),
+      cirurgia: vBool('an-cirurgia'), cirurgia_detalhe: v('an-cirurgia-detalhe'),
+      transfusao_sanguinea: vBool('an-transfusao'), transfusao_quando: v('an-transfusao-quando'),
+      teve_hemorragia_transfusao: document.getElementById('an-transfusao-hemorragia').checked,
+      radioterapia: vBool('an-radioterapia'), radioterapia_detalhe: v('an-radioterapia-detalhe'),
+      regime_alimentar: vBool('an-regime-alimentar'), regime_alimentar_detalhe: v('an-regime-alimentar-detalhe'),
+      doenca_diabete: vBool('an-diabete'), doenca_febre_reumatica: vBool('an-febre-reumatica'), doenca_renal: vBool('an-doenca-renal'),
+      doenca_cardiopatia: vBool('an-cardiopatia'), doenca_epilepsia: vBool('an-epilepsia'), doenca_hepatite: vBool('an-hepatite'),
+      doenca_hemorragia: vBool('an-hemorragia'), doenca_mental: vBool('an-doenca-mental'), doenca_dst: vBool('an-dst'),
+      doenca_pulmonar: vBool('an-pulmonar'), doenca_pressao_arterial: vBool('an-pressao'), doenca_gastrica: vBool('an-gastrica'),
+      doenca_alergia: vBool('an-alergia'), doenca_alergia_qual: v('an-alergia-qual'),
+      doenca_infeccoes: vBool('an-infeccoes'), doenca_infeccoes_qual: v('an-infeccoes-qual'),
+      outra_doenca: v('an-outra-doenca'),
+      ciclos_menstruais_normais: vBool('an-ciclos'), metodo_contraceptivo: v('an-metodo-contraceptivo'), periodo_menstrual: v('an-periodo'), esta_gravida: vBool('an-gravida'),
+      ja_fez_tratamento_odontologico: vBool('an-trat-odonto'), problema_tratamento_odontologico: v('an-problema-odonto'),
+      higiene_escovacao_freq: v('an-higiene-escovacao'), higiene_fio_dental_freq: v('an-higiene-fio'), higiene_enxaguatorio_freq: v('an-higiene-enxaguatorio'),
+      gengiva_sangra: vBool('an-gengiva-sangra'), boca_seca: vBool('an-boca-seca'), dificuldade_mastigar: vBool('an-dificuldade-mastigar'), dentes_moles: vBool('an-dentes-moles'),
+      usa_aparelho_protetico: vBool('an-usa-protese'), protese_condicao: v('an-protese-condicao'),
+      protese_tipo_superior: v('an-protese-superior'), protese_tipo_inferior: v('an-protese-inferior'), protese_trocas_efetuadas: v('an-protese-trocas'), protese_motivo: v('an-protese-motivo'),
+      fumante: vBool('an-fumante'), fumante_tempo: v('an-fumante-tempo'), ex_fumante: vBool('an-ex-fumante'), ex_fumante_tempo: v('an-ex-fumante-tempo'),
+      etilista: vBool('an-etilista'), etilista_tempo: v('an-etilista-tempo'), ex_etilista: vBool('an-ex-etilista'), ex_etilista_tempo: v('an-ex-etilista-tempo'),
+      outros_habitos: v('an-outros-habitos'),
+      exame_pressao_arterial: v('an-exame-pa'), exame_temperatura: v('an-exame-temp'), exame_pulso: v('an-exame-pulso'),
+      exame_peso: v('an-exame-peso'), exame_altura: v('an-exame-altura'), exame_tempo_sangramento: v('an-exame-tsangramento'),
+      exame_tempo_coagulacao: v('an-exame-tcoagulacao'), exame_extra_bucal: v('an-exame-extra-bucal'), exame_intra_bucal: v('an-exame-intra-bucal'),
+      exame_radiografico: v('an-exame-radiografico'), exame_data: v('an-exame-data'), exame_examinador: v('an-exame-examinador'), exame_disciplina: v('an-exame-disciplina'),
+      ciente_veracidade: document.getElementById('an-ciente').checked, ciente_data: v('an-ciente-data'),
+      atualizado_em: new Date().toISOString(),
+    };
+    if (anamnese && anamnese.id) {
+      await sb(sbClient.from('anamneses').update(payload).eq('id', anamnese.id));
+      await logAcao('atualizou', 'anamnese', anamnese.id);
+    } else {
+      const criado = await sb(sbClient.from('anamneses').insert(payload).select().single());
+      await logAcao('criou', 'anamnese', criado.id);
+    }
+    toast('Anamnese salva');
+    abrirProntuario(pacienteId);
+  });
+}
+
+function badgeStatusAtendimento(a) {
+  if (a.status === 'concluido') return `<span class="badge badge-done">Concluído${a.concluido_em ? ' · ' + a.concluido_em : ''}</span>`;
+  return `<span class="badge badge-progress">${a.status === 'aguardando' ? 'Aguardando' : 'Em andamento'}</span>`;
+}
+
 async function abrirAtendimentoDetalhe(atendimentoId, pacienteId) {
-  const paciente = await sb(sbClient.from('pacientes').select('nome,codigo').eq('id', pacienteId).single());
+  await ensureEspecialidades();
+  const paciente = await sb(sbClient.from('pacientes').select('*').eq('id', pacienteId).single());
   const a = await sb(sbClient.from('atendimentos').select('*, especialidades(nome)').eq('id', atendimentoId).single());
   const lesoes = await sb(sbClient.from('lesoes_estomatologicas')
     .select('*, regioes_stomatograma(nome, lado, painel)').eq('atendimento_id', atendimentoId).order('id', { ascending: false }));
   const logs = await sb(sbClient.from('auditoria').select('*').eq('atendimento_id', atendimentoId).order('id', { ascending: false }));
   const documentos = await sb(sbClient.from('documentos').select('*').eq('atendimento_id', atendimentoId).order('id', { ascending: false }));
+  const dentesProc = await sb(sbClient.from('procedimentos_dente').select('*').eq('atendimento_id', atendimentoId).order('id'));
+  const anamnese = await fetchAnamnese(pacienteId);
 
+  const editavel = a.status !== 'concluido';
   const box = document.getElementById('atendimento-detalhe');
-  box.innerHTML = `
-    <div class="card">
-      <div class="card-head">
-        <div>
-          <div class="eyebrow">Relatório do atendimento · ${paciente.codigo} — ${paciente.nome}</div>
-          <h3 style="margin:0">Atendimento #${a.id} <span class="badge badge-progress">${a.especialidades?.nome || 'sem especialidade'}</span></h3>
-        </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-ghost btn-sm" id="baixar-relatorio-atendimento">Baixar relatório (PDF)</button>
-          <button class="btn btn-ghost btn-sm" id="voltar-prontuario">← Voltar ao prontuário</button>
-        </div>
+
+  const cabecalho = `
+    <div class="card-head">
+      <div>
+        <div class="eyebrow">Relatório do atendimento · ${paciente.codigo} — ${paciente.nome}</div>
+        <h3 style="margin:0">Atendimento #${a.id} ${badgeStatusAtendimento(a)}</h3>
       </div>
-      <div class="grid2">
-        <div><div class="muted">Aluno</div><div>${a.aluno || '—'}</div></div>
-        <div><div class="muted">Professor supervisor</div><div>${a.professor || '—'}</div></div>
-        <div style="grid-column:1/-1"><div class="muted">Queixa principal</div><div>${a.queixa_principal || '—'}</div></div>
-        <div style="grid-column:1/-1"><div class="muted">História da doença atual</div><div>${a.hda || '—'}</div></div>
-        <div><div class="muted">Status</div><div>${a.status}</div></div>
-        <div><div class="muted">Data</div><div class="mono">${a.criado_em}</div></div>
-        <div style="grid-column:1/-1"><div class="muted">Achados clínicos</div><div>${a.achados_clinicos || '—'}</div></div>
-        <div style="grid-column:1/-1"><div class="muted">Procedimentos</div><div>${a.procedimentos || '—'}</div></div>
-        <div style="grid-column:1/-1"><div class="muted">Evolução</div><div>${a.evolucao || '—'}</div></div>
-        <div><div class="muted">Hipótese diagnóstica</div><div>${a.hipotese_diagnostica || '—'}</div></div>
-        <div><div class="muted">Diagnóstico</div><div>${a.diagnostico || '—'}</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" id="baixar-relatorio-atendimento">Baixar relatório (PDF)</button>
+        ${editavel
+          ? `<button class="btn btn-primary btn-sm" id="btn-concluir-atendimento">Concluir atendimento</button>`
+          : `<button class="btn btn-ghost btn-sm" id="btn-reabrir-atendimento">Reabrir para editar</button>`}
+        <button class="btn btn-ghost btn-sm" id="voltar-prontuario">← Voltar ao prontuário</button>
       </div>
-      ${a.especialidades?.nome === 'Estomatologia' ? `
-        <div class="divider"></div>
-        <div class="muted" style="margin-bottom:8px">Lesões do Estomatograma — detalhe completo (${lesoes.length})</div>
-        ${lesoes.length ? lesoes.map(l => `
-          <div class="lesao-item" style="margin-bottom:10px;">
-            <div class="rgn" style="margin-bottom:6px;">${l.regioes_stomatograma.nome}${l.regioes_stomatograma.lado && l.regioes_stomatograma.lado !== 'central' ? ' · ' + l.regioes_stomatograma.lado : ''}</div>
-            <table>
-              <tr><td class="muted" style="width:38%">Lesão fundamental</td><td>${l.lesao_fundamental || '—'}</td></tr>
-              <tr><td class="muted">Tamanho</td><td>${l.tamanho || '—'}</td></tr>
-              <tr><td class="muted">Localização</td><td>${l.localizacao || '—'}</td></tr>
-              <tr><td class="muted">Duração</td><td>${l.duracao || '—'}</td></tr>
-              <tr><td class="muted">Coloração</td><td>${l.coloracao || '—'}</td></tr>
-              <tr><td class="muted">Superfície</td><td>${l.superficie || '—'}</td></tr>
-              <tr><td class="muted">Consistência</td><td>${l.consistencia || '—'}</td></tr>
-              <tr><td class="muted">Sensibilidade</td><td>${l.sensibilidade || '—'}</td></tr>
-              <tr><td class="muted">Formato</td><td>${l.formato || '—'}</td></tr>
-              <tr><td class="muted">Limite</td><td>${l.limite || '—'}</td></tr>
-              <tr><td class="muted">Número</td><td>${l.numero || '—'}</td></tr>
-              <tr><td class="muted">Lateralidade</td><td>${l.lateralidade || '—'}</td></tr>
-              <tr><td class="muted">Observações</td><td>${l.observacoes || '—'}</td></tr>
-            </table>
-          </div>`).join('') : `<div class="empty-state">Nenhuma lesão registrada.</div>`}
-        <button class="btn btn-ghost btn-sm" id="ir-stoma-detalhe" style="margin-top:8px">Abrir Estomatograma deste atendimento</button>
-      ` : ''}
-      <div class="divider"></div>
-      <div class="muted" style="margin-bottom:8px">Documentos deste atendimento</div>
-      <div id="docs-atendimento-lista">${renderDocumentosCards(documentos)}</div>
-      <div class="divider"></div>
-      ${formularioUploadHtml('doc-atd', a.especialidades?.nome === 'Estomatologia' ? lesoes : null)}
-      <div class="divider"></div>
-      <div class="muted" style="margin-bottom:8px">Histórico de alterações neste atendimento</div>
-      <table>
-        <tr><th>Quando</th><th>Campo</th><th>Antes</th><th>Depois</th><th>Usuário</th></tr>
-        ${logs.filter(l => l.campo).map(l => `
-          <tr><td class="mono">${l.criado_em}</td><td>${l.campo}</td><td>${l.valor_anterior || '—'}</td><td>${l.valor_novo || '—'}</td><td>${l.usuario}</td></tr>
-        `).join('') || `<tr><td colspan="5" class="empty-state">Nenhuma alteração registrada ainda neste atendimento.</td></tr>`}
-      </table>
     </div>`;
 
+  const tabelaDenteProc = `
+    <table id="tbl-dente-proc">
+      <tr><th>Dente</th><th>Procedimento</th>${editavel ? '<th></th>' : ''}</tr>
+      ${dentesProc.map(d => `<tr><td class="mono">${d.dente || '—'}</td><td>${d.procedimento || '—'}</td>${editavel ? `<td><button class="btn btn-danger btn-sm" data-del-dp="${d.id}">Remover</button></td>` : ''}</tr>`).join('')
+        || `<tr><td colspan="${editavel ? 3 : 2}" class="empty-state">Nenhum procedimento registrado.</td></tr>`}
+    </table>
+    ${editavel ? `
+      <div class="grid2" style="grid-template-columns:120px 1fr auto;align-items:end;gap:10px;margin:8px 0 4px;">
+        <div class="field" style="margin-bottom:0;"><label>Dente</label><input id="ea-dp-dente"></div>
+        <div class="field" style="margin-bottom:0;"><label>Procedimento</label><input id="ea-dp-procedimento"></div>
+        <button class="btn btn-ghost btn-sm" id="ea-dp-add">Adicionar</button>
+      </div>` : ''}`;
+
+  if (editavel) {
+    box.innerHTML = `
+      <div class="card">
+        ${cabecalho}
+        <div class="muted" style="margin-bottom:8px">Ficha SUS · controle da visita <span style="font-weight:400;">(editável até concluir o atendimento)</span></div>
+        <div class="grid3">
+          <div class="field"><label>Especialidade</label>
+            <select id="ea-especialidade">${state.especialidades.map(e => `<option value="${e.id}" ${e.id == a.especialidade_id ? 'selected' : ''}>${e.nome}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Clínica</label><input id="ea-clinica" value="${escAttr(a.clinica)}"></div>
+          <div class="field"><label>Horário</label><input id="ea-horario" value="${escAttr(a.horario)}"></div>
+          <div class="field"><label>Tipo de consulta</label>
+            <select id="ea-tipo-consulta"><option value="">Selecione...</option>${['Urgência/Emergência', '1ª Consulta', 'Retorno'].map(o => `<option ${a.tipo_consulta === o ? 'selected' : ''}>${o}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Prontuário (SUS)</label><input id="ea-prontuario-sus" value="${escAttr(a.prontuario_sus)}"></div>
+          <div class="field"><label>Aluno</label><input id="ea-aluno" value="${escAttr(a.aluno)}"></div>
+          <div class="field"><label>RA do aluno</label><input id="ea-aluno-ra" value="${escAttr(a.aluno_ra)}"></div>
+          <div class="field"><label>Professor supervisor</label><input id="ea-professor" value="${escAttr(a.professor)}"></div>
+          <div class="field"><label>Cirurgião-dentista responsável</label><input id="ea-cd" value="${escAttr(a.cd_responsavel)}"></div>
+          <div class="field"><label>Responsável pelo preenchimento</label><input id="ea-responsavel" value="${escAttr(a.responsavel_preenchimento)}"></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-soft);margin-bottom:14px;">
+          <input type="checkbox" id="ea-assinatura" style="width:auto;" ${a.assinatura_coletada ? 'checked' : ''}> Assinatura do paciente coletada na ficha física
+        </label>
+        <div class="muted" style="margin-bottom:6px;">Dente / Procedimento</div>
+        ${tabelaDenteProc}
+        <div class="divider"></div>
+        <div class="grid2">
+          <div class="field" style="grid-column:1/-1;"><label>Queixa principal</label><textarea id="ea-queixa">${escHtml(a.queixa_principal)}</textarea></div>
+          <div class="field" style="grid-column:1/-1;"><label>História da doença atual</label><textarea id="ea-hda">${escHtml(a.hda)}</textarea></div>
+        </div>
+        <div class="divider"></div>
+        <div class="muted" style="margin-bottom:8px">Anamnese do paciente</div>
+        <div id="ea-anamnese-resumo">${renderResumoAnamneseHtml(anamnese, pacienteId)}</div>
+        <div class="divider"></div>
+        <div class="grid2">
+          <div class="field" style="grid-column:1/-1;"><label>Achados clínicos</label><textarea id="ea-achados">${escHtml(a.achados_clinicos)}</textarea></div>
+          <div class="field" style="grid-column:1/-1;"><label>Procedimentos</label><textarea id="ea-procedimentos">${escHtml(a.procedimentos)}</textarea></div>
+          <div class="field" style="grid-column:1/-1;"><label>Evolução</label><textarea id="ea-evolucao">${escHtml(a.evolucao)}</textarea></div>
+          <div class="field"><label>Hipótese diagnóstica</label><input id="ea-hipotese" value="${escAttr(a.hipotese_diagnostica)}"></div>
+          <div class="field"><label>Diagnóstico</label><input id="ea-diagnostico" value="${escAttr(a.diagnostico)}"></div>
+        </div>
+        <button class="btn btn-primary" id="btn-salvar-atendimento">Salvar alterações</button>
+        ${a.especialidades?.nome === 'Estomatologia' ? `<button class="btn btn-ghost" id="ir-stoma-detalhe">Abrir Estomatograma deste atendimento</button>` : ''}
+        <div class="divider"></div>
+        <div class="muted" style="margin-bottom:8px">Documentos deste atendimento</div>
+        <div id="docs-atendimento-lista">${renderDocumentosCards(documentos)}</div>
+        <div class="divider"></div>
+        ${formularioUploadHtml('doc-atd', a.especialidades?.nome === 'Estomatologia' ? lesoes : null)}
+        <div class="divider"></div>
+        <div class="muted" style="margin-bottom:8px">Histórico de alterações neste atendimento</div>
+        <table>
+          <tr><th>Quando</th><th>Campo</th><th>Antes</th><th>Depois</th><th>Usuário</th></tr>
+          ${logs.filter(l => l.campo).map(l => `
+            <tr><td class="mono">${l.criado_em}</td><td>${l.campo}</td><td>${l.valor_anterior || '—'}</td><td>${l.valor_novo || '—'}</td><td>${l.usuario}</td></tr>
+          `).join('') || `<tr><td colspan="5" class="empty-state">Nenhuma alteração registrada ainda neste atendimento.</td></tr>`}
+        </table>
+      </div>`;
+  } else {
+    box.innerHTML = `
+      <div class="card">
+        ${cabecalho}
+        <div class="muted" style="margin-bottom:8px">Ficha SUS · controle da visita</div>
+        <div class="grid3">
+          <div><div class="muted">Clínica</div><div>${a.clinica || '—'}</div></div>
+          <div><div class="muted">Horário</div><div>${a.horario || '—'}</div></div>
+          <div><div class="muted">Tipo de consulta</div><div>${a.tipo_consulta || '—'}</div></div>
+          <div><div class="muted">Prontuário (SUS)</div><div>${a.prontuario_sus || '—'}</div></div>
+          <div><div class="muted">RA do aluno</div><div>${a.aluno_ra || '—'}</div></div>
+          <div><div class="muted">Cirurgião-dentista responsável</div><div>${a.cd_responsavel || '—'}</div></div>
+          <div><div class="muted">Responsável pelo preenchimento</div><div>${a.responsavel_preenchimento || '—'}</div></div>
+          <div><div class="muted">Assinatura coletada</div><div>${a.assinatura_coletada ? 'Sim' : 'Não'}</div></div>
+        </div>
+        ${dentesProc.length ? `<div class="muted" style="margin:10px 0 6px;">Dente / Procedimento</div>${tabelaDenteProc}` : ''}
+        <div class="divider"></div>
+        <div class="grid2">
+          <div><div class="muted">Aluno</div><div>${a.aluno || '—'}</div></div>
+          <div><div class="muted">Professor supervisor</div><div>${a.professor || '—'}</div></div>
+          <div style="grid-column:1/-1"><div class="muted">Queixa principal</div><div>${a.queixa_principal || '—'}</div></div>
+          <div style="grid-column:1/-1"><div class="muted">História da doença atual</div><div>${a.hda || '—'}</div></div>
+          <div><div class="muted">Status</div><div>${a.status}</div></div>
+          <div><div class="muted">Data</div><div class="mono">${a.criado_em}</div></div>
+        </div>
+        <div class="divider"></div>
+        <div class="muted" style="margin-bottom:8px">Anamnese do paciente</div>
+        <div id="ea-anamnese-resumo">${renderResumoAnamneseHtml(anamnese, pacienteId)}</div>
+        <div class="divider"></div>
+        <div class="grid2">
+          <div style="grid-column:1/-1"><div class="muted">Achados clínicos</div><div>${a.achados_clinicos || '—'}</div></div>
+          <div style="grid-column:1/-1"><div class="muted">Procedimentos</div><div>${a.procedimentos || '—'}</div></div>
+          <div style="grid-column:1/-1"><div class="muted">Evolução</div><div>${a.evolucao || '—'}</div></div>
+          <div><div class="muted">Hipótese diagnóstica</div><div>${a.hipotese_diagnostica || '—'}</div></div>
+          <div><div class="muted">Diagnóstico</div><div>${a.diagnostico || '—'}</div></div>
+        </div>
+        ${a.especialidades?.nome === 'Estomatologia' ? `
+          <div class="divider"></div>
+          <div class="muted" style="margin-bottom:8px">Lesões do Estomatograma — detalhe completo (${lesoes.length})</div>
+          ${lesoes.length ? lesoes.map(l => `
+            <div class="lesao-item" style="margin-bottom:10px;">
+              <div class="rgn" style="margin-bottom:6px;">${l.regioes_stomatograma.nome}${l.regioes_stomatograma.lado && l.regioes_stomatograma.lado !== 'central' ? ' · ' + l.regioes_stomatograma.lado : ''}</div>
+              <table>
+                <tr><td class="muted" style="width:38%">Lesão fundamental</td><td>${l.lesao_fundamental || '—'}</td></tr>
+                <tr><td class="muted">Tamanho</td><td>${l.tamanho || '—'}</td></tr>
+                <tr><td class="muted">Localização</td><td>${l.localizacao || '—'}</td></tr>
+                <tr><td class="muted">Duração</td><td>${l.duracao || '—'}</td></tr>
+                <tr><td class="muted">Coloração</td><td>${l.coloracao || '—'}</td></tr>
+                <tr><td class="muted">Superfície</td><td>${l.superficie || '—'}</td></tr>
+                <tr><td class="muted">Consistência</td><td>${l.consistencia || '—'}</td></tr>
+                <tr><td class="muted">Sensibilidade</td><td>${l.sensibilidade || '—'}</td></tr>
+                <tr><td class="muted">Formato</td><td>${l.formato || '—'}</td></tr>
+                <tr><td class="muted">Limite</td><td>${l.limite || '—'}</td></tr>
+                <tr><td class="muted">Número</td><td>${l.numero || '—'}</td></tr>
+                <tr><td class="muted">Lateralidade</td><td>${l.lateralidade || '—'}</td></tr>
+                <tr><td class="muted">Observações</td><td>${l.observacoes || '—'}</td></tr>
+              </table>
+            </div>`).join('') : `<div class="empty-state">Nenhuma lesão registrada.</div>`}
+          <button class="btn btn-ghost btn-sm" id="ir-stoma-detalhe" style="margin-top:8px">Abrir Estomatograma deste atendimento</button>
+        ` : ''}
+        <div class="divider"></div>
+        <div class="muted" style="margin-bottom:8px">Documentos deste atendimento</div>
+        <div id="docs-atendimento-lista">${renderDocumentosCards(documentos)}</div>
+        <div class="divider"></div>
+        ${formularioUploadHtml('doc-atd', a.especialidades?.nome === 'Estomatologia' ? lesoes : null)}
+        <div class="divider"></div>
+        <div class="muted" style="margin-bottom:8px">Histórico de alterações neste atendimento</div>
+        <table>
+          <tr><th>Quando</th><th>Campo</th><th>Antes</th><th>Depois</th><th>Usuário</th></tr>
+          ${logs.filter(l => l.campo).map(l => `
+            <tr><td class="mono">${l.criado_em}</td><td>${l.campo}</td><td>${l.valor_anterior || '—'}</td><td>${l.valor_novo || '—'}</td><td>${l.usuario}</td></tr>
+          `).join('') || `<tr><td colspan="5" class="empty-state">Nenhuma alteração registrada ainda neste atendimento.</td></tr>`}
+        </table>
+      </div>`;
+  }
+
+  wireResumoAnamneseLinks(box);
   document.getElementById('voltar-prontuario').addEventListener('click', () => abrirProntuario(pacienteId));
   document.getElementById('baixar-relatorio-atendimento').addEventListener('click', (e) => {
     e.target.disabled = true; e.target.textContent = 'Gerando...';
@@ -472,6 +969,57 @@ async function abrirAtendimentoDetalhe(atendimentoId, pacienteId) {
   if (stomaBtn) stomaBtn.addEventListener('click', () => { state.atendimentoAtual = { id: a.id }; go('stomatograma'); });
   wireUploadForm('doc-atd', { paciente_id: pacienteId, atendimento_id: atendimentoId }, () => abrirAtendimentoDetalhe(atendimentoId, pacienteId));
   wireDocumentosCards(documentos, () => abrirAtendimentoDetalhe(atendimentoId, pacienteId));
+
+  const btnConcluir = document.getElementById('btn-concluir-atendimento');
+  if (btnConcluir) btnConcluir.addEventListener('click', async () => {
+    if (!confirm('Concluir este atendimento? Ele deixa de poder ser editado até ser reaberto.')) return;
+    await sb(sbClient.from('atendimentos').update({ status: 'concluido', concluido_em: new Date().toISOString() }).eq('id', atendimentoId));
+    await logAcao('concluiu', 'atendimento', atendimentoId);
+    toast('Atendimento concluído');
+    abrirAtendimentoDetalhe(atendimentoId, pacienteId);
+  });
+  const btnReabrir = document.getElementById('btn-reabrir-atendimento');
+  if (btnReabrir) btnReabrir.addEventListener('click', async () => {
+    await sb(sbClient.from('atendimentos').update({ status: 'em_atendimento', concluido_em: null }).eq('id', atendimentoId));
+    await logAcao('reabriu', 'atendimento', atendimentoId);
+    toast('Atendimento reaberto para edição');
+    abrirAtendimentoDetalhe(atendimentoId, pacienteId);
+  });
+
+  if (editavel) {
+    document.getElementById('ea-dp-add').addEventListener('click', async () => {
+      const dente = v('ea-dp-dente'), procedimento = v('ea-dp-procedimento');
+      if (!dente && !procedimento) { toast('Preencha dente ou procedimento'); return; }
+      await sb(sbClient.from('procedimentos_dente').insert({ atendimento_id: atendimentoId, dente, procedimento }));
+      await logAcao('adicionou', 'procedimento_dente', atendimentoId);
+      abrirAtendimentoDetalhe(atendimentoId, pacienteId);
+    });
+    document.querySelectorAll('[data-del-dp]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await sb(sbClient.from('procedimentos_dente').delete().eq('id', btn.dataset.delDp));
+        await logAcao('removeu', 'procedimento_dente', atendimentoId);
+        abrirAtendimentoDetalhe(atendimentoId, pacienteId);
+      });
+    });
+    document.getElementById('btn-salvar-atendimento').addEventListener('click', async () => {
+      const payload = {
+        especialidade_id: document.getElementById('ea-especialidade').value,
+        clinica: v('ea-clinica'), horario: v('ea-horario'), tipo_consulta: v('ea-tipo-consulta'),
+        prontuario_sus: v('ea-prontuario-sus'), aluno: v('ea-aluno'), aluno_ra: v('ea-aluno-ra'),
+        professor: v('ea-professor'), cd_responsavel: v('ea-cd'), responsavel_preenchimento: v('ea-responsavel'),
+        assinatura_coletada: document.getElementById('ea-assinatura').checked,
+        queixa_principal: v('ea-queixa'), hda: v('ea-hda'),
+        achados_clinicos: v('ea-achados'), procedimentos: v('ea-procedimentos'), evolucao: v('ea-evolucao'),
+        hipotese_diagnostica: v('ea-hipotese'), diagnostico: v('ea-diagnostico'),
+      };
+      for (const [campo, novo] of Object.entries(payload)) {
+        await logCampo(atendimentoId, campo, a[campo], novo);
+      }
+      await sb(sbClient.from('atendimentos').update(payload).eq('id', atendimentoId));
+      toast('Atendimento atualizado');
+      abrirAtendimentoDetalhe(atendimentoId, pacienteId);
+    });
+  }
 }
 
 // ============================= ATENDIMENTO =============================
@@ -496,15 +1044,69 @@ async function renderAtendimento() {
             ${state.especialidades.map(e => `<option value="${e.id}">${e.nome}</option>`).join('')}
           </select>
         </div>
-        <div class="field"><label>Aluno</label><input id="a-aluno" placeholder="Nome (RA)"></div>
+        <div class="field"><label>Aluno</label><input id="a-aluno" placeholder="Nome"></div>
+        <div class="field"><label>RA do aluno</label><input id="a-aluno-ra"></div>
         <div class="field"><label>Professor supervisor</label><input id="a-professor" placeholder="Nome (CRO)"></div>
+        <div class="field"><label>Cirurgião-dentista responsável</label><input id="a-cd" placeholder="Nome (CRO)"></div>
+        <div class="field"><label>Tipo de consulta</label>
+          <select id="a-tipo-consulta">
+            <option value="">Selecione...</option>
+            <option>Urgência/Emergência</option><option>1ª Consulta</option><option>Retorno</option>
+          </select>
+        </div>
+        <div class="field"><label>Clínica</label><input id="a-clinica" placeholder="ex.: Prótese II"></div>
+        <div class="field"><label>Horário</label><input id="a-horario" placeholder="ex.: 08:50"></div>
+        <div class="field"><label>Prontuário (SUS)</label><input id="a-prontuario-sus"></div>
+        <div class="field"><label>Responsável pelo preenchimento</label><input id="a-responsavel" placeholder="Recepção"></div>
         <div class="field" style="grid-column:1/-1"><label>Queixa principal</label><textarea id="a-queixa"></textarea></div>
         <div class="field" style="grid-column:1/-1"><label>História da doença atual</label><textarea id="a-hda"></textarea></div>
       </div>
-      <button class="btn btn-primary" id="btn-criar-atendimento">Criar atendimento</button>
+
+      <div class="divider"></div>
+      <div class="muted" style="margin-bottom:8px">Anamnese do paciente</div>
+      <div id="a-anamnese-resumo" class="muted">Selecione um paciente para ver o resumo da anamnese.</div>
+      <div class="divider"></div>
+      <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-soft);margin-bottom:14px;">
+        <input type="checkbox" id="a-assinatura" style="width:auto;"> Assinatura do paciente coletada na ficha física
+      </label>
+
+      <div class="divider"></div>
+      <div class="muted" style="margin-bottom:8px">Dente / Procedimento</div>
+      <div id="dente-proc-linhas"></div>
+      <button class="btn btn-ghost btn-sm" id="btn-add-dente-proc" style="margin-bottom:14px;">+ Adicionar dente/procedimento</button>
+
+      <div>
+        <button class="btn btn-primary" id="btn-criar-atendimento">Criar atendimento</button>
+      </div>
     </div>
     <div id="atendimento-criado"></div>
   `;
+
+  async function atualizarResumoAnamnese(pid) {
+    const resumoBox = document.getElementById('a-anamnese-resumo');
+    if (!pid) { resumoBox.innerHTML = 'Selecione um paciente para ver o resumo da anamnese.'; return; }
+    const anamnese = await fetchAnamnese(pid);
+    resumoBox.innerHTML = renderResumoAnamneseHtml(anamnese, pid);
+    wireResumoAnamneseLinks(resumoBox);
+  }
+  document.getElementById('a-paciente').addEventListener('change', (e) => atualizarResumoAnamnese(e.target.value));
+  if (state.pacienteAtual) atualizarResumoAnamnese(state.pacienteAtual.id);
+
+  const linhasBox = document.getElementById('dente-proc-linhas');
+  function addLinhaDenteProc() {
+    const row = document.createElement('div');
+    row.className = 'grid2';
+    row.style.cssText = 'grid-template-columns:120px 1fr auto;align-items:end;gap:10px;';
+    row.innerHTML = `
+      <div class="field" style="margin-bottom:8px;"><label>Dente</label><input class="dp-dente"></div>
+      <div class="field" style="margin-bottom:8px;"><label>Procedimento</label><input class="dp-procedimento"></div>
+      <button class="btn btn-ghost btn-sm" type="button" style="margin-bottom:8px;">Remover</button>
+    `;
+    row.querySelector('button').addEventListener('click', () => row.remove());
+    linhasBox.appendChild(row);
+  }
+  addLinhaDenteProc();
+  document.getElementById('btn-add-dente-proc').addEventListener('click', addLinhaDenteProc);
 
   document.getElementById('btn-criar-atendimento').addEventListener('click', async () => {
     const paciente_id = document.getElementById('a-paciente').value;
@@ -512,47 +1114,31 @@ async function renderAtendimento() {
     const especialidade_id = document.getElementById('a-especialidade').value;
     const atendimento = await sb(sbClient.from('atendimentos').insert({
       paciente_id, especialidade_id,
-      aluno: v('a-aluno'), professor: v('a-professor'), queixa_principal: v('a-queixa'), hda: v('a-hda'),
+      aluno: v('a-aluno'), aluno_ra: v('a-aluno-ra'), professor: v('a-professor'), cd_responsavel: v('a-cd'),
+      tipo_consulta: v('a-tipo-consulta'), clinica: v('a-clinica'), horario: v('a-horario'),
+      prontuario_sus: v('a-prontuario-sus'), responsavel_preenchimento: v('a-responsavel'),
+      assinatura_coletada: document.getElementById('a-assinatura').checked,
+      queixa_principal: v('a-queixa'), hda: v('a-hda'),
       status: 'em_atendimento',
     }).select().single());
     await logAcao('criou', 'atendimento', atendimento.id);
+
+    const linhas = [...linhasBox.querySelectorAll('.grid2')].map(row => ({
+      dente: row.querySelector('.dp-dente').value.trim(),
+      procedimento: row.querySelector('.dp-procedimento').value.trim(),
+    })).filter(l => l.dente || l.procedimento);
+    if (linhas.length) {
+      await sb(sbClient.from('procedimentos_dente').insert(
+        linhas.map(l => ({ atendimento_id: atendimento.id, dente: l.dente || null, procedimento: l.procedimento || null }))
+      ));
+    }
+
     state.atendimentoAtual = atendimento;
     toast('Atendimento criado');
-    renderAtendimentoCriado(atendimento);
-  });
-}
-
-function renderAtendimentoCriado(atendimento) {
-  const esp = state.especialidades.find(e => e.id == atendimento.especialidade_id);
-  document.getElementById('atendimento-criado').innerHTML = `
-    <div class="card">
-      <div class="card-head">
-        <h3 style="margin:0">Atendimento #${atendimento.id} <span class="badge badge-progress">Sessão ${atendimento.numero_sessao}</span></h3>
-        ${esp && esp.nome === 'Estomatologia' ? `<button class="btn btn-primary btn-sm" id="ir-stoma">Abrir Estomatograma</button>` : ''}
-      </div>
-      <div class="grid2">
-        <div class="field"><label>Achados clínicos</label><textarea id="e-achados"></textarea></div>
-        <div class="field"><label>Procedimentos</label><textarea id="e-proc"></textarea></div>
-        <div class="field"><label>Evolução</label><textarea id="e-evol"></textarea></div>
-        <div class="field"><label>Hipótese diagnóstica</label><input id="e-hipotese"></div>
-        <div class="field"><label>Diagnóstico</label><input id="e-diag"></div>
-      </div>
-      <button class="btn btn-ghost" id="btn-salvar-evolucao">Salvar evolução</button>
-    </div>`;
-  const btnStoma = document.getElementById('ir-stoma');
-  if (btnStoma) btnStoma.addEventListener('click', () => go('stomatograma'));
-
-  document.getElementById('btn-salvar-evolucao').addEventListener('click', async () => {
-    const campos = {
-      achados_clinicos: v('e-achados'), procedimentos: v('e-proc'), evolucao: v('e-evol'),
-      hipotese_diagnostica: v('e-hipotese'), diagnostico: v('e-diag'),
-    };
-    const atual = await sb(sbClient.from('atendimentos').select('*').eq('id', atendimento.id).single());
-    for (const [campo, novo] of Object.entries(campos)) {
-      await logCampo(atendimento.id, campo, atual[campo], novo);
-    }
-    await sb(sbClient.from('atendimentos').update(campos).eq('id', atendimento.id));
-    toast('Evolução salva no Supabase');
+    document.getElementById('atendimento-criado').innerHTML = `<div class="card"><div class="muted">Abrindo atendimento...</div></div>`;
+    await go('pacientes');
+    await abrirProntuario(paciente_id);
+    await abrirAtendimentoDetalhe(atendimento.id, paciente_id);
   });
 }
 
@@ -601,11 +1187,23 @@ function novoRelatorioPDF() {
   function campo(label, valor) {
     const texto = (valor === null || valor === undefined || valor === '') ? '—' : String(valor);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(9.3); doc.setTextColor(84, 101, 93);
-    const linhas = doc.splitTextToSize(texto, maxWidth - 135);
-    quebraPagina(linhas.length * 12.5 + 3);
-    doc.text(label + ':', margin, y);
+    const labelTexto = label + ':';
+    const labelWidth = doc.getTextWidth(labelTexto);
+    const colunaValor = 135; // largura padrão reservada para o rótulo
+    // rótulos compridos (ex.: "Cartão Nacional de Saúde (CNS)") não cabem na coluna
+    // padrão — nesse caso o valor desce para a linha de baixo, em vez de sobrepor.
+    const rotuloLongo = labelWidth > colunaValor - 10;
+    const larguraValor = rotuloLongo ? maxWidth : maxWidth - colunaValor;
+    const linhas = doc.splitTextToSize(texto, larguraValor);
+    quebraPagina(linhas.length * 12.5 + (rotuloLongo ? 12.5 : 0) + 3);
+    doc.text(labelTexto, margin, y);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(20, 33, 29);
-    doc.text(linhas, margin + 135, y);
+    if (rotuloLongo) {
+      y += 12.5;
+      doc.text(linhas, margin, y);
+    } else {
+      doc.text(linhas, margin + colunaValor, y);
+    }
     y += Math.max(14, linhas.length * 12.5) + 3;
   }
   function paragrafo(texto) {
@@ -639,12 +1237,132 @@ function blocoDadosPaciente(r, paciente) {
   r.campo('Paciente', `${paciente.nome} (${paciente.codigo})`);
   r.campo('CPF', paciente.cpf);
   r.campo('Data de nascimento', paciente.data_nascimento);
+  r.campo('Sexo', paciente.sexo);
+  r.campo('Cor/etnia', paciente.cor_etnia);
+  r.campo('Cartão Nacional de Saúde (CNS)', paciente.cns);
   r.campo('Telefone', paciente.telefone);
   r.campo('Endereço', paciente.endereco);
-  r.campo('Alergias', paciente.alergias);
-  r.campo('Comorbidades', paciente.comorbidades);
-  r.campo('Medicamentos', paciente.medicamentos);
-  r.campo('Hábitos', paciente.habitos);
+  r.campo('Município', paciente.municipio);
+}
+
+function blocoFichaSUSVisita(r, a) {
+  r.campo('Clínica', a.clinica);
+  r.campo('Horário', a.horario);
+  r.campo('Tipo de consulta', a.tipo_consulta);
+  r.campo('Prontuário (SUS)', a.prontuario_sus);
+  r.campo('Aluno', a.aluno);
+  r.campo('RA do aluno', a.aluno_ra);
+  r.campo('Professor supervisor', a.professor);
+  r.campo('Cirurgião-dentista responsável', a.cd_responsavel);
+  r.campo('Responsável pelo preenchimento', a.responsavel_preenchimento);
+  r.campo('Assinatura do paciente coletada', a.assinatura_coletada ? 'Sim' : 'Não');
+}
+
+function blocoHistoricoAlteracoes(r, logs) {
+  const relevantes = logs.filter(l => l.campo);
+  if (!relevantes.length) { r.paragrafo('Nenhuma alteração registrada.'); return; }
+  relevantes.forEach(l => {
+    r.subitem(`${l.criado_em} — ${l.campo}: "${l.valor_anterior || '—'}" para "${l.valor_novo || '—'}" (${l.usuario})`);
+  });
+}
+
+function blocoDenteProcedimento(r, lista) {
+  if (!lista.length) { r.paragrafo('Nenhum procedimento registrado.'); return; }
+  lista.forEach(d => r.subitem(`Dente ${d.dente || '—'} — ${d.procedimento || 'sem descrição'}`));
+}
+
+// Campos legados (alergias/comorbidades/medicamentos/hábitos por atendimento) — mantidos
+// só para não perder o que já foi registrado em atendimentos anteriores à Anamnese.
+function blocoAnamneseBasica(r, a) {
+  r.campo('Alergias', a.alergias);
+  r.campo('Comorbidades', a.comorbidades);
+  r.campo('Medicamentos', a.medicamentos);
+  r.campo('Hábitos', a.habitos);
+}
+
+// Resumo curto de segurança (alergias, medicamentos, condições relevantes), usado no
+// relatório de UM atendimento — a ficha completa fica no relatório do paciente.
+function blocoResumoAnamneseSeguranca(r, an) {
+  if (!an) { r.paragrafo('Anamnese ainda não preenchida para este paciente.'); return; }
+  r.campo('Alergias', an.doenca_alergia ? (an.doenca_alergia_qual || 'Sim (não especificado)') : 'Não relatadas');
+  r.campo('Medicamento em uso', an.medicamento_atual ? (an.medicamento_atual_qual || 'Sim (não especificado)') : 'Não relatado');
+  r.campo('Cardiopatia', simNaoTexto(an.doenca_cardiopatia));
+  r.campo('Diabete', simNaoTexto(an.doenca_diabete));
+  r.campo('Hemorragia / transfusão prévia', (an.doenca_hemorragia || an.transfusao_sanguinea) ? 'Sim' : 'Não');
+  r.campo('Gestante', simNaoTexto(an.esta_gravida));
+  r.paragrafo('Ficha de anamnese completa disponível na "Ficha completa do paciente".');
+}
+
+// Ficha de anamnese e exame físico completa — usada no relatório completo do paciente.
+function blocoAnamneseCompleta(r, an) {
+  if (!an) { r.paragrafo('Anamnese ainda não preenchida para este paciente.'); return; }
+
+  r.campo('R.G.', an.rg); r.campo('Idade', an.idade); r.campo('Estado civil', an.estado_civil);
+  r.campo('Bairro', an.bairro); r.campo('CEP', an.cep);
+  r.campo('Outro telefone (recado)', an.outro_telefone); r.campo('Falar com', an.falar_com);
+  r.campo('Profissão', an.profissao); r.campo('Local de trabalho', an.local_trabalho);
+  r.campo('Endereço do trabalho', an.endereco_trabalho); r.campo('Telefone do trabalho', an.telefone_trabalho);
+  r.campo('Nacionalidade', an.nacionalidade); r.campo('Naturalidade', an.naturalidade); r.campo('Procedência', an.procedencia);
+  r.campo('Pai', `${an.pai_nome || '—'}${an.pai_nacionalidade ? ' (' + an.pai_nacionalidade + ')' : ''}`);
+  r.campo('Mãe', `${an.mae_nome || '—'}${an.mae_nacionalidade ? ' (' + an.mae_nacionalidade + ')' : ''}`);
+  r.campo('Contato de emergência', `${an.contato_emergencia_nome || '—'}${an.contato_emergencia_telefone ? ' · ' + an.contato_emergencia_telefone : ''}${an.contato_emergencia_endereco ? ' · ' + an.contato_emergencia_endereco : ''}`);
+
+  r.espaco(4);
+  r.campo('Autorização — documento', `${an.autorizacao_documento_tipo || '—'} ${an.autorizacao_documento_numero || ''}`.trim());
+  r.campo('Autorização — data', an.autorizacao_data);
+  r.campo('Autorização — assinatura coletada', an.autorizacao_assinatura_coletada ? 'Sim' : 'Não');
+
+  r.espaco(6);
+  r.campo('Fazendo tratamento médico', `${simNaoTexto(an.tratamento_medico)}${an.tratamento_medico_detalhe ? ' — ' + an.tratamento_medico_detalhe : ''}`);
+  r.campo('Medicamento em uso', `${simNaoTexto(an.medicamento_atual)}${an.medicamento_atual_qual ? ' — ' + an.medicamento_atual_qual : ''}`);
+  r.campo('Cirurgia prévia', `${simNaoTexto(an.cirurgia)}${an.cirurgia_detalhe ? ' — ' + an.cirurgia_detalhe : ''}`);
+  r.campo('Transfusão sanguínea', `${simNaoTexto(an.transfusao_sanguinea)}${an.transfusao_quando ? ' — ' + an.transfusao_quando : ''}${an.teve_hemorragia_transfusao ? ' (teve hemorragia)' : ''}`);
+  r.campo('Radioterapia', `${simNaoTexto(an.radioterapia)}${an.radioterapia_detalhe ? ' — ' + an.radioterapia_detalhe : ''}`);
+  r.campo('Regime alimentar especial', `${simNaoTexto(an.regime_alimentar)}${an.regime_alimentar_detalhe ? ' — ' + an.regime_alimentar_detalhe : ''}`);
+
+  const doencas = [
+    ['Diabete', an.doenca_diabete], ['Febre reumática', an.doenca_febre_reumatica], ['Doença renal', an.doenca_renal],
+    ['Cardiopatia', an.doenca_cardiopatia], ['Epilepsia', an.doenca_epilepsia], ['Hepatite', an.doenca_hepatite],
+    ['Hemorragia', an.doenca_hemorragia], ['Doença mental', an.doenca_mental], ['DST', an.doenca_dst],
+    ['Doença pulmonar', an.doenca_pulmonar], ['Problemas de pressão arterial', an.doenca_pressao_arterial],
+    ['Doença gástrica', an.doenca_gastrica],
+  ].filter(([, val]) => val === true).map(([nome]) => nome);
+  r.campo('Doenças relatadas', doencas.length ? doencas.join(', ') : 'Nenhuma relatada');
+  r.campo('Alergia', `${simNaoTexto(an.doenca_alergia)}${an.doenca_alergia_qual ? ' — ' + an.doenca_alergia_qual : ''}`);
+  r.campo('Infecções (tuberculose, paracoccidioidomicose etc.)', `${simNaoTexto(an.doenca_infeccoes)}${an.doenca_infeccoes_qual ? ' — ' + an.doenca_infeccoes_qual : ''}`);
+  r.campo('Outra doença mencionada', an.outra_doenca);
+  r.campo('Ciclos menstruais normais', simNaoTexto(an.ciclos_menstruais_normais));
+  r.campo('Método contraceptivo / período', `${an.metodo_contraceptivo || '—'}${an.periodo_menstrual ? ' · ' + an.periodo_menstrual : ''}`);
+  r.campo('Gestante', simNaoTexto(an.esta_gravida));
+
+  r.espaco(6);
+  r.campo('Já fez tratamento odontológico', `${simNaoTexto(an.ja_fez_tratamento_odontologico)}${an.problema_tratamento_odontologico ? ' — ' + an.problema_tratamento_odontologico : ''}`);
+  r.campo('Higiene bucal', `Escovação: ${an.higiene_escovacao_freq || '—'} · Fio dental: ${an.higiene_fio_dental_freq || '—'} · Enxaguatório: ${an.higiene_enxaguatorio_freq || '—'}`);
+  r.campo('Gengiva sangra / boca seca', `${simNaoTexto(an.gengiva_sangra)} / ${simNaoTexto(an.boca_seca)}`);
+  r.campo('Dificuldade em mastigar / dentes moles', `${simNaoTexto(an.dificuldade_mastigar)} / ${simNaoTexto(an.dentes_moles)}`);
+  r.campo('Usa aparelho protético', simNaoTexto(an.usa_aparelho_protetico));
+  if (an.usa_aparelho_protetico) {
+    r.campo('Prótese superior / inferior', `${an.protese_tipo_superior || '—'} / ${an.protese_tipo_inferior || '—'}`);
+    r.campo('Trocas efetuadas', an.protese_trocas_efetuadas);
+    r.campo('Condição da prótese', `${an.protese_condicao || '—'}${an.protese_motivo ? ' — ' + an.protese_motivo : ''}`);
+  }
+
+  r.espaco(6);
+  r.campo('Fumante / ex-fumante', `${simNaoTexto(an.fumante)}${an.fumante_tempo ? ' (' + an.fumante_tempo + ')' : ''} / ${simNaoTexto(an.ex_fumante)}${an.ex_fumante_tempo ? ' (' + an.ex_fumante_tempo + ')' : ''}`);
+  r.campo('Álcool / ex-etilista', `${simNaoTexto(an.etilista)}${an.etilista_tempo ? ' (' + an.etilista_tempo + ')' : ''} / ${simNaoTexto(an.ex_etilista)}${an.ex_etilista_tempo ? ' (' + an.ex_etilista_tempo + ')' : ''}`);
+  r.campo('Outros hábitos', an.outros_habitos);
+
+  r.espaco(6);
+  r.campo('Exame físico — PA / temperatura / pulso', `${an.exame_pressao_arterial || '—'} / ${an.exame_temperatura || '—'} / ${an.exame_pulso || '—'}`);
+  r.campo('Peso / altura', `${an.exame_peso || '—'} / ${an.exame_altura || '—'}`);
+  r.campo('Tempo de sangramento / coagulação', `${an.exame_tempo_sangramento || '—'} / ${an.exame_tempo_coagulacao || '—'}`);
+  r.campo('Extra-bucal', null); r.paragrafo(an.exame_extra_bucal);
+  r.campo('Intra-bucal', null); r.paragrafo(an.exame_intra_bucal);
+  r.campo('Exame radiográfico', null); r.paragrafo(an.exame_radiografico);
+  r.campo('Examinador / disciplina / data', `${an.exame_examinador || '—'} / ${an.exame_disciplina || '—'} / ${an.exame_data || '—'}`);
+
+  r.espaco(6);
+  r.campo('Ciente da veracidade das informações', `${an.ciente_veracidade ? 'Sim' : 'Não'}${an.ciente_data ? ' — ' + an.ciente_data : ''}`);
 }
 
 function blocoLesoes(r, lesoes) {
@@ -685,18 +1403,28 @@ async function gerarRelatorioAtendimento(atendimentoId, pacienteId) {
   const lesoes = await sb(sbClient.from('lesoes_estomatologicas')
     .select('*, regioes_stomatograma(nome, lado, painel)').eq('atendimento_id', atendimentoId).order('id'));
   const documentos = await sb(sbClient.from('documentos').select('*').eq('atendimento_id', atendimentoId).order('id'));
+  const dentesProc = await sb(sbClient.from('procedimentos_dente').select('*').eq('atendimento_id', atendimentoId).order('id'));
+  const logs = await sb(sbClient.from('auditoria').select('*').eq('atendimento_id', atendimentoId).order('id'));
+  const anamnese = await fetchAnamnese(pacienteId);
 
   const r = novoRelatorioPDF();
   r.titulo('Relatório de Atendimento Odontológico');
   r.campo('Atendimento', `#${a.id} — sessão ${a.numero_sessao}`);
   r.campo('Especialidade', a.especialidades?.nome);
   r.campo('Data', a.criado_em);
-  r.campo('Aluno', a.aluno);
-  r.campo('Professor supervisor', a.professor);
-  r.campo('Status', a.status);
+  r.campo('Status', a.status === 'concluido' ? `Concluído${a.concluido_em ? ' em ' + a.concluido_em : ''}` : 'Em andamento');
 
-  r.secao('Dados do paciente');
+  r.secao('Dados do paciente (Ficha SUS)');
   blocoDadosPaciente(r, paciente);
+
+  r.secao('Ficha SUS — controle da visita');
+  blocoFichaSUSVisita(r, a);
+
+  r.secao(`Dente / Procedimento (${dentesProc.length})`);
+  blocoDenteProcedimento(r, dentesProc);
+
+  r.secao('Resumo de segurança (anamnese do paciente)');
+  blocoResumoAnamneseSeguranca(r, anamnese);
 
   r.secao('Queixa e história');
   r.campo('Queixa principal', a.queixa_principal);
@@ -717,6 +1445,9 @@ async function gerarRelatorioAtendimento(atendimentoId, pacienteId) {
   r.secao(`Documentos anexados (${documentos.length})`);
   blocoDocumentos(r, documentos);
 
+  r.secao('Histórico de alterações');
+  blocoHistoricoAlteracoes(r, logs);
+
   r.rodape();
   const nomeArquivo = `Relatorio_Atendimento_${a.id}_${slugNomeArquivo(paciente.nome)}.pdf`;
   r.doc.save(nomeArquivo);
@@ -733,19 +1464,41 @@ async function gerarRelatorioCompletoPaciente(pacienteId) {
   const encaminhamentos = await sb(sbClient.from('encaminhamentos').select('*').eq('paciente_id', pacienteId).order('id'));
   const documentosGerais = await sb(sbClient.from('documentos')
     .select('*').eq('paciente_id', pacienteId).is('atendimento_id', null).order('id'));
+  const anamnese = await fetchAnamnese(pacienteId);
 
   const r = novoRelatorioPDF();
   r.titulo('Ficha Completa do Paciente');
   blocoDadosPaciente(r, paciente);
 
+  r.secao('Anamnese e exame físico (triagem)');
+  blocoAnamneseCompleta(r, anamnese);
+
   r.secao(`Histórico de atendimentos (${atendimentos.length})`);
   if (!atendimentos.length) r.paragrafo('Nenhum atendimento registrado.');
   for (let i = 0; i < atendimentos.length; i++) {
     const a = atendimentos[i];
-    if (i > 0) r.espaco(10);
+    if (i > 0) r.espaco(12);
     r.campo('Atendimento', `#${a.id} — sessão ${a.numero_sessao} — ${a.especialidades?.nome || 'sem especialidade'}`);
+    r.campo('Status', a.status === 'concluido' ? `Concluído${a.concluido_em ? ' em ' + a.concluido_em : ''}` : 'Em andamento');
     r.campo('Data', a.criado_em);
-    r.campo('Aluno / Professor', `${a.aluno || '—'} / ${a.professor || '—'}`);
+    r.campo('Clínica / Horário', `${a.clinica || '—'} / ${a.horario || '—'}`);
+    r.campo('Tipo de consulta', a.tipo_consulta);
+    r.campo('Prontuário (SUS)', a.prontuario_sus);
+    r.campo('Aluno (RA)', `${a.aluno || '—'}${a.aluno_ra ? ' (' + a.aluno_ra + ')' : ''}`);
+    r.campo('Professor / CD responsável', `${a.professor || '—'} / ${a.cd_responsavel || '—'}`);
+    r.campo('Responsável pelo preenchimento', a.responsavel_preenchimento);
+
+    const dentesProc = await sb(sbClient.from('procedimentos_dente').select('*').eq('atendimento_id', a.id).order('id'));
+    if (dentesProc.length) {
+      r.campo('Dente / Procedimento', null);
+      dentesProc.forEach(d => r.subitem(`Dente ${d.dente || '—'} — ${d.procedimento || 'sem descrição'}`));
+    }
+
+    if (a.alergias || a.comorbidades || a.medicamentos || a.habitos) {
+      r.campo('Anamnese básica registrada neste atendimento (registro antigo)', null);
+      blocoAnamneseBasica(r, a);
+    }
+
     r.campo('Queixa principal', a.queixa_principal);
     r.paragrafo('Achados clínicos: ' + (a.achados_clinicos || '—'));
     r.paragrafo('Procedimentos: ' + (a.procedimentos || '—'));
